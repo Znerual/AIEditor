@@ -5,9 +5,34 @@ export const DebugPanel = ({ events, socketStatus }) => {
     return (
         <div className="debug-panel">
             <h3>Debug Information</h3>
-            <div>Socket Status: {socketStatus}</div>
-            <div>Recent Events:</div>
-            <pre>{JSON.stringify(events, null, 2)}</pre>
+            <div className="mb-4">
+                <strong>Socket Status:</strong> 
+                <span className={`ml-2 ${socketStatus === 'connected' ? 'text-green-500' : 'text-red-500'}`}>
+                    {socketStatus}
+                </span>
+            </div>
+            <div>
+                <strong>Recent Events:</strong>
+                {events.length === 0 ? (
+                    <div className="text-gray-500 mt-2">No events yet</div>
+                ) : (
+                    <div className="mt-2 max-h-96 overflow-auto">
+                        {events.map((event, index) => (
+                            <div key={index} className="mb-2 p-2 bg-gray-100 rounded">
+                                <div><strong>Event:</strong> {event.event}</div>
+                                <div><strong>Type:</strong> {event.type || 'received'}</div>
+                                <div><strong>Time:</strong> {new Date(event.timestamp).toLocaleTimeString()}</div>
+                                <div>
+                                    <strong>Data:</strong>
+                                    <pre className="text-sm mt-1">
+                                        {JSON.stringify(event.data, null, 2)}
+                                    </pre>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
