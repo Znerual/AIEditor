@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import ReactQuill from 'react-quill';
 import { useWebSocket } from './hooks/useWebSocket';
 import { EditorToolbar } from './components/Editor/EditorToolbar';
@@ -31,6 +31,7 @@ const App = () => {
     }, []);
 
     const handleChatAnswer = useCallback((answer) => {
+        console.log('Received chat answer:', answer);
         setChatMessages(prev => [...prev, { text: answer, sender: 'server' }]);
     }, []);
 
@@ -65,7 +66,12 @@ const App = () => {
         structure_parsed: handleStructureParsed,
     };
 
-    const { emit } = useWebSocket(socketEvents);
+    const { emit, status, debugEvents: wsDebugEvents } = useWebSocket(socketEvents);
+
+    // Update debug events whenever websocket events occur
+    useEffect(() => {
+        setDebugEvents(wsDebugEvents);
+    }, [wsDebugEvents]);
 
     // Event handlers
     const handleEditorChange = useCallback((content, delta, source, editor) => {
