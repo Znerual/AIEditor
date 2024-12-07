@@ -31,9 +31,12 @@ export const useWebSocket = (events) => {
             return acc;
         }, {});
 
+        console.log('Setting up event listeners:', Object.keys(events));
+
         // Setup event listeners
-        Object.entries(events).forEach(([event, handler]) => {
+        Object.entries(wrappedHandlers).forEach(([event, handler]) => {
             socket.on(event, handler);
+            console.log('Setting up event listener:', event, ' with handler ', handler);
         });
 
         // Add a catch-all listener for debugging
@@ -41,13 +44,14 @@ export const useWebSocket = (events) => {
             console.log(`[WebSocket] Received event: ${eventName}`, args);
         });
 
-         return () => {
+        return () => {
             // Cleanup event listeners
             Object.keys(events).forEach((event) => {
                 socket.off(event);
             });
             socketService.removeStatusListener(handleStatus);
-            socket.disconnect();
+            socketService.disconnect();
+            console.log("Disconnecting the websocket");
         };
     }, [events]);
 
