@@ -7,6 +7,7 @@ from socket_manager import SocketManager
 from cli import CLI
 import threading
 import logging
+import queue
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,11 +30,12 @@ class FlaskApp:
             }
         })
 
+        self.message_queue = queue.Queue() # Create the message queue
         self.socket_manager = SocketManager()
         socketio = SocketIO(
             app=self.app,
             cors_allowed_origins=Config.CORS_ORIGINS,
-            #async_mode='threading',
+            async_mode='threading',
             logger=False,
             engineio_logger=False,
             ping_timeout=60000,
@@ -65,14 +67,33 @@ class FlaskApp:
             return response
 
     def run_cli(self):
-        cli = CLI(self.socket_manager)
+        cli = CLI(self.message_queue)
         cli.start_cli()
+
+    def process_queue(self):
+        while True:
+            try:
+                self.socket_manager.socketio.sleep(1)  
+                message = self.message_queue.get()  # Non-blocking with timeout
+                print("Processing message from queue:", message)
+                # Simulate some work that might take time, but don't block
+                self.socket_manager.socketio.emit(
+                    message['event'], 
+                    message['data'], 
+                    namespace=message.get('namespace')
+                )
+                self.message_queue.task_done()
+            
+            except Exception as e:
+                print(f"Error processing message: {e}")
 
     def run(self):
         # Start CLI in a separate thread
         cli_thread = threading.Thread(target=self.run_cli)
         cli_thread.daemon = True
         cli_thread.start()
+
+        message_queue_thread = self.socket_manager.socketio.start_background_task(self.process_queue)
 
         # Run the Flask application
         self.socket_manager.socketio.run(
