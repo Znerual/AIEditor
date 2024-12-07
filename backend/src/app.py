@@ -1,5 +1,4 @@
 # src/app.py
-
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -33,7 +32,7 @@ class FlaskApp:
         self.socket_manager = SocketManager()
         socketio = SocketIO(
             app=self.app,
-            cors_allowed_origins=["http://localhost:3000"],
+            cors_allowed_origins=Config.CORS_ORIGINS,
             #async_mode='threading',
             logger=False,
             engineio_logger=False,
@@ -41,13 +40,10 @@ class FlaskApp:
             ping_interval=25000,
             manage_session=True,
             always_connect=True,
-            path='socket.io'
+            #path='socket.io'
         )
 
         self.socket_manager.init_socket_manager(socketio)
-
-        # # Allow CORS for Socket.IO
-        # self.socketio.init_app(self.app, cors_allowed_origins=Config.CORS_ORIGINS)
 
         # setup routes
         self.setup_routes()
@@ -86,7 +82,8 @@ class FlaskApp:
             port=5000,
             allow_unsafe_werkzeug=True,
             log_output=False, # hide heartbeat messages
-            use_reloader=False) 
+            use_reloader=False,
+            ) 
 
 if __name__ == '__main__':
     app = FlaskApp()
