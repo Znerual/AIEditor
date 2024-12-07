@@ -1,3 +1,5 @@
+# src/cli.py
+
 import click
 import time
 from events import WebSocketEvent
