@@ -66,6 +66,7 @@ const App = () => {
         test: () => console.log("Test Event"),
     }), []); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
 
+
     const { emit, status, debugEvents: wsDebugEvents } = useWebSocket(socketEvents);
 
     // Update debug events whenever websocket events occur
@@ -75,7 +76,9 @@ const App = () => {
 
     // Event handlers
     const handleEditorChange = useCallback((content, delta, source, editor) => {
-        emit('text_change', { delta });
+        const ops = delta.ops
+        emit('text_change', ops );
+        setEditorContent(content);
         if (process.env.REACT_APP_DEBUG) {
             setDebugEvents(prev => [...prev, { 
                 type: 'editor_change',
@@ -84,7 +87,7 @@ const App = () => {
                 timestamp: new Date()
             }]);
         }
-    }, [emit]);
+    }, [emit, setEditorContent]);
 
     const handleChatSubmit = useCallback((message) => {
       if (message.trim()) {
