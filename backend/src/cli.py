@@ -19,7 +19,7 @@ class CLI:
                  # Get event name input
                 event_name = input("\nEnter event name (or 'exit' to quit): ").strip()
                 
-                if event_name.lower() == 'exit':
+                if event_name.lower() == 'exit' or event_name.lower() == 'quit':
                     print("Exiting CLI...")
                     break
                 
