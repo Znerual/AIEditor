@@ -6,6 +6,7 @@ class SocketService {
         this.socket = null;
         this.debugMode = process.env.REACT_APP_DEBUG === 'true';
         this.statusListeners = new Set();
+        this.activeConnections = 0;
     }
 
     addStatusListener(listener) {
@@ -44,11 +45,25 @@ class SocketService {
             reconnectionDelayMax: 5000,
             timeout: 20000,
             autoConnect: true,
-            withCredentials: true
+            withCredentials: true,
+            // path: 'socket.io'
         });
 
+        this.activeConnections += 1;
         this.setupDebugListeners();
         return this.socket;
+    }
+
+    disconnect() {
+       this.activeConnections -= 1;
+        if (this.activeConnections === 0 && this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
+        }
+        this.notifyStatusListeners('disconnected');
+        if (this.debugMode) {
+            console.log('[WebSocket] Disconnected');
+        }
     }
 
     setupDebugListeners() {
@@ -105,15 +120,6 @@ class SocketService {
         this.socket.emit(event, data);
     }
 
-    disconnect() {
-        if (this.socket) {
-            this.socket.disconnect();
-            this.notifyStatusListeners('disconnected');
-            if (this.debugMode) {
-                console.log('[WebSocket] Disconnected');
-            }
-        }
-    }
 
     getStatus() {
         return this.socket?.connected ? 'connected' : 'disconnected';
