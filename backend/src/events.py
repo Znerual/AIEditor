@@ -1,4 +1,4 @@
-# events.py
+# src/events.py
 from dataclasses import dataclass
 from typing import Any, Optional
 
