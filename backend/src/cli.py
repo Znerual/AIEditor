@@ -21,7 +21,7 @@ class CLI:
                 
                 if event_name.lower() == 'exit' or event_name.lower() == 'quit':
                     print("Exiting CLI...")
-                    break
+                    return
                 
                 # Get event data input
                 event_data = input("Enter event data: ").strip()
@@ -45,6 +45,6 @@ class CLI:
                 time.sleep(0.1)
 
             except KeyboardInterrupt:
-                break
+                return
             except Exception as e:
                 print(f"Error: {e}")
