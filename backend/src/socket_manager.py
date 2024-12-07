@@ -13,13 +13,15 @@ class SocketManager:
     
     def init_socket_manager(self, socketio):
         self._socketio = socketio
-    
         self._setup_handlers()
 
     def _setup_handlers(self):
         @self._socketio.on('connect')
-        def handle_connect():
+        def handle_connect(): 
+            self._socketio.emit("Success")
             print('Client connected')
+            self.emit_event(WebSocketEvent("Success", "two"))
+           
         
         @self._socketio.on('disconnect')
         def handle_disconnect():
