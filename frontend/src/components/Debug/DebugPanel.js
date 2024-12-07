@@ -11,12 +11,12 @@ export const DebugPanel = ({ events, socketStatus }) => {
                     {socketStatus}
                 </span>
             </div>
-            <div>
+            <div className="events-section">
                 <strong>Recent Events:</strong>
                 {events.length === 0 ? (
                     <div className="text-gray-500 mt-2">No events yet</div>
                 ) : (
-                    <div className="mt-2 max-h-96 overflow-auto">
+                    <div className="events-list">
                         {events.map((event, index) => (
                             <div key={index} className="mb-2 p-2 bg-gray-100 rounded">
                                 <div><strong>Event:</strong> {event.event}</div>

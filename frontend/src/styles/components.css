@@ -52,8 +52,7 @@
   }
   
   
-  /* Chat section styles */
- /* styles/components.css */
+/* Chat section styles */
 .chat-section {
     padding: 1rem;
     border-top: 1px solid #e2e8f0;
@@ -117,3 +116,28 @@
     margin-right: 2rem;
 }
 
+/* Debug panel styles */
+
+.debug-panel {
+  border: 1px solid #e2e8f0; /* Add a border */
+  height: 400px; /* Set a fixed height (or max-height) */
+  overflow-y: auto; /* Enable vertical scrolling */
+}
+
+.events-section {
+    height: 300px;
+    overflow-y: auto;
+}
+
+.events-list {
+  overflow-y: auto; /* Allow vertical scrolling within the list */
+}
+
+.events-list > div { /* Style each event container */
+  border-bottom: 1px solid #e2e8f0; /* Subtle separator between events */
+  padding: 8px; /* Add some padding around each event */
+}
+
+.events-list > div:last-child {
+  border-bottom: none; /* Remove the border from the last event */
+}
