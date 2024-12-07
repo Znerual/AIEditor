@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill from 'react-quill';
 import { useWebSocket } from './hooks/useWebSocket';
 import { EditorToolbar } from './components/Editor/EditorToolbar';
@@ -19,16 +19,15 @@ const App = () => {
     const [uploadedContentFiles, setUploadedContentFiles] = useState([]);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [debugEvents, setDebugEvents] = useState([]);
-    const [socketStatus, setSocketStatus] = useState('disconnected');
     const [chatMessages, setChatMessages] = useState([]);
     const [editorContent, setEditorContent] = useState('');
     const quillRef = useRef(null);
     
     // Handler functions
-    const handleAutocompletion = useCallback((suggestion) => {
-        console.log("Show Autocompletion", suggestion);
+    const handleAutocompletion = (event) => {
+        console.log("Show Autocompletion", event);
         // Implementation for autocompletion
-    }, []);
+    };
 
     const handleChatAnswer = useCallback((answer) => {
         console.log('Received chat answer:', answer);
@@ -58,13 +57,14 @@ const App = () => {
 
 
     // WebSocket event handlers
-    const socketEvents = {
-        connect: () => setSocketStatus('connected'),
-        disconnect: () => setSocketStatus('disconnected'),
+    const socketEvents = useMemo(() => ({
+        connect: () => console.log('connected'),
+        disconnect: () => console.log('disconnected'),
         autocompletion: handleAutocompletion,
         chat_answer: handleChatAnswer,
         structure_parsed: handleStructureParsed,
-    };
+        test: () => console.log("Test Event"),
+    }), []); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
 
     const { emit, status, debugEvents: wsDebugEvents } = useWebSocket(socketEvents);
 
@@ -91,7 +91,7 @@ const App = () => {
         setChatMessages([...chatMessages, { text: message, sender: 'user' }]);
         emit('chat', { text: message });
       }
-    }, [emit]);
+    }, [emit, chatMessages]);
 
     return (
         <div className="app-container">
@@ -141,7 +141,7 @@ const App = () => {
                 {process.env.REACT_APP_DEBUG && (
                     <DebugPanel 
                         events={debugEvents}
-                        socketStatus={socketStatus}
+                        socketStatus={status}
                     />
                 )}
             </div>
