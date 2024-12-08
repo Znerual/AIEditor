@@ -3,3 +3,5 @@ flask-socketio
 flask-cors
 eventlet
 gunicorn
+quill-delta
+Flask-SQLAlchemy
