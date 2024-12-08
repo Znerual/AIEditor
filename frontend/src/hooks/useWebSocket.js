@@ -1,14 +1,30 @@
 // src/hooks/useWebSocket.js
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { socketService } from '../services/socket.service';
+import { useAuth } from '../contexts/AuthContext';
 
 export const useWebSocket = (events) => {
+    const { token } = useAuth(); // Get token from auth context
     const [status, setStatus] = useState(socketService.getStatus());
     const [debugEvents, setDebugEvents] = useState([]);
+    const eventsRef = useRef(events);
+
+     // Update events ref when events change
+     useEffect(() => {
+        eventsRef.current = events;
+    }, [events]);
 
     useEffect(() => {
+        if (!token) {
+            socketService.disconnect();
+            setStatus('unauthorized');
+            console.log('Disconnect because there is no access token, login first')
+            return;
+        }
+
         const socket = socketService.connect();
-        
+        if (!socket) return;
+
         // Setup status listener
         const handleStatus = (newStatus) => {
             setStatus(newStatus);
@@ -22,6 +38,7 @@ export const useWebSocket = (events) => {
                 setDebugEvents(prev => [...prev, {
                     event,
                     data: args,
+                    type: 'received',
                     timestamp: new Date().toISOString()
                 }]);
                 
@@ -31,12 +48,10 @@ export const useWebSocket = (events) => {
             return acc;
         }, {});
 
-        console.log('Setting up event listeners:', Object.keys(events));
-
         // Setup event listeners
         Object.entries(wrappedHandlers).forEach(([event, handler]) => {
             socket.on(event, handler);
-            console.log('Setting up event listener:', event, ' with handler ', handler);
+            console.log(`[WebSocket] Registered listener for: ${event}`);
         });
 
         // Add a catch-all listener for debugging
@@ -46,14 +61,16 @@ export const useWebSocket = (events) => {
 
         return () => {
             // Cleanup event listeners
-            Object.keys(events).forEach((event) => {
-                socket.off(event);
-            });
+            if (socket) {
+                Object.keys(eventsRef.current).forEach((event) => {
+                    socket.off(event);
+                });
+            }
             socketService.removeStatusListener(handleStatus);
             socketService.disconnect();
-            console.log("Disconnecting the websocket");
+            console.log("[WebSocket] Cleanup complete");
         };
-    }, [events]);
+    }, [token]);
 
     const emit = useCallback((event, data) => {
         socketService.emit(event, data);

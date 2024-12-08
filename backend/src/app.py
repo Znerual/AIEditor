@@ -1,5 +1,5 @@
 # src/app.py
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from config import Config
@@ -8,6 +8,8 @@ from cli import CLI
 import threading
 import logging
 import queue
+from models import db, User
+from auth import Auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +21,13 @@ class FlaskApp:
         self.app = Flask(__name__)
         self.app.config.from_object(Config)
         self.app.config['SECRET_KEY'] = 'your-secret-key'  # Add a secret key
+
+        # Initialize database
+        db.init_app(self.app)
+        
+        # Create database tables
+        with self.app.app_context():
+            db.create_all()
 
          # Initialize CORS
         CORS(self.app, resources={
@@ -51,6 +60,22 @@ class FlaskApp:
         self.setup_routes()
 
     def setup_routes(self):
+        @self.app.route('/api/login', methods=['POST'])
+        def login():
+            data = request.get_json()
+            email = data.get('email')
+            password = data.get('password')
+            
+            user = User.query.filter_by(email=email).first()
+            if user and user.check_password(password):
+                token = Auth.generate_token(str(user.id))
+                return jsonify({
+                    'token': token,
+                    'user': {'id': user.id, 'email': user.email}
+                })
+            
+            return jsonify({'error': 'Invalid credentials'}), 401
+
         @self.app.route('/health')
         def health_check():
             return jsonify({"status": "healthy"})

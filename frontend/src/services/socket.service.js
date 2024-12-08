@@ -27,6 +27,12 @@ class SocketService {
 
 
     connect() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            this.updateStatus('unauthorized');
+            return null;
+        }
+
         if (this.socket?.connected) {
             return this.socket;
         }
@@ -37,6 +43,7 @@ class SocketService {
         }
 
         this.socket = io('http://localhost:5000', {
+            query: { token },
             transports: ['websocket', 'polling'],  // Allow fallback to polling
             debug: this.debugMode,
             reconnection: true,
@@ -89,6 +96,13 @@ class SocketService {
             if (this.socket.io.opts.transports[0] === 'websocket') {
                 console.log('[WebSocket] Falling back to polling');
                 this.socket.io.opts.transports = ['polling', 'websocket'];
+            }
+            if (error.message.includes('authentication')) {
+                this.updateStatus('unauthorized');
+                // Optional: Clear invalid token
+                localStorage.removeItem('token');
+            } else {
+                this.updateStatus('error');
             }
         });
 
