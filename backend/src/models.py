@@ -35,14 +35,30 @@ class Document(db.Model):
 
     def apply_delta(self, delta):
         """Apply a Quill delta to the document content"""
-
         if not self.content:
-            self.content = Delta()
+            self.content = {'ops': []}  # Initialize as dictionary with ops array
+       
+        current_content = Delta(self.content['ops'] if isinstance(self.content, dict) else self.content)
         
         if isinstance(delta, str):
             delta = Delta(json.loads(delta))
-            
-        self.content = self.content.compose(delta)
+        elif isinstance(delta, list):
+            delta = Delta(delta)
+        elif not isinstance(delta, Delta):
+            raise ValueError(f"Unknown delta type {type(delta)}")
+        
+        # Compose the deltas
+        new_content = current_content.compose(delta)
+        
+        # Store the ops array in the content field
+        self.content = {'ops': new_content.ops}
         
         self.updated_at = datetime.now(timezone.utc)
-        return self.content
+        return self.content['ops']
+    
+    def get_current_delta(self):
+        if not self.content:
+            return Delta()
+        
+        return Delta(self.content['ops'] if isinstance(self.content, dict) else self.content)
+    
