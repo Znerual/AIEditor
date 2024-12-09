@@ -7,6 +7,12 @@ class SocketService {
         this.debugMode = process.env.REACT_APP_DEBUG === 'true';
         this.statusListeners = new Set();
         this.activeConnections = 0;
+        this.currentStatus = 'disconnected';
+    }
+
+    updateStatus(newStatus) {
+        this.currentStatus = newStatus; // Update the current status
+        this.notifyStatusListeners(newStatus); // Notify listeners
     }
 
     addStatusListener(listener) {
@@ -67,7 +73,7 @@ class SocketService {
             this.socket.disconnect();
             this.socket = null;
         }
-        this.notifyStatusListeners('disconnected');
+        this.updateStatus('disconnected');
         if (this.debugMode) {
             console.log('[WebSocket] Disconnected');
         }
@@ -77,14 +83,14 @@ class SocketService {
         if (!this.socket) return;
 
         this.socket.on('connect', () => {
-            this.notifyStatusListeners('connected');
+            this.updateStatus('connected');
             if (this.debugMode) {
                 console.log(`[WebSocket] Connected with ID: ${this.socket.id}`);
             }
         });
 
         this.socket.on('disconnect', (reason) => {
-            this.notifyStatusListeners('disconnected');
+            this.updateStatus('disconnected');
             if (this.debugMode) {
                 console.log('[WebSocket] Disconnected:', reason);
             }
