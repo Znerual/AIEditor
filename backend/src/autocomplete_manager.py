@@ -1,13 +1,15 @@
 # /src/autocompletion_manager.py
 
-from functools import partial
-import asyncio
 import google.generativeai as genai
-from concurrent.futures import ThreadPoolExecutor
+import time
 
+class DebugResponse:
+    def __init__(self, text):
+        self.text = text
 class DebugModel:
-    def generate_content(prompt):
-        return f"Debug answer for prompt: {prompt}"
+    def generate_content(self, prompt):
+        time.sleep(1)
+        return DebugResponse(f"Debug answer for prompt: {prompt}")
 
 class AutocompleteManager:
     def __init__(self, api_key, debug=False):
@@ -17,9 +19,8 @@ class AutocompleteManager:
         else:
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel('gemini-1.5-flash')
-        self._executor = ThreadPoolExecutor(max_workers=5)
         
-    async def get_suggestions(self, content, cursor_position):
+    def get_suggestions(self, content, cursor_position):
         """
         Get autocompletion suggestions based on the current document content
         and cursor position.
@@ -40,12 +41,8 @@ class AutocompleteManager:
         """
         
         try:
-            # Run Gemini API call in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                self._executor,
-                partial(self.model.generate_content, prompt)
-            )
+            # Run Gemini API call in thread pool
+            response = self.model.generate_content(prompt)
             
             # Parse and format suggestions
             suggestions = [
