@@ -1,6 +1,7 @@
 # src/document_manager.py
 from models import db, Document
 from typing import Optional
+from delta import Delta
 import json
 
 class DocumentManager:
@@ -31,4 +32,4 @@ class DocumentManager:
         document = Document.query.filter_by(id=document_id, user_id=user_id).first()
         if not document:
             raise ValueError("Document not found")
-        return document.content
+        return Delta(document.content)
