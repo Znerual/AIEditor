@@ -179,3 +179,36 @@
   color: red;
   margin-bottom: 1rem;
 }
+
+/* Switch Button Styles */
+.login-form button[type="button"] { /* Target the switch button specifically */
+  background-color: #e2e8f0; /* Light gray background */
+  color: #4a5568; /* Dark gray text */
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease; /* Smooth transitions */
+  margin-left: 10px; /* Add some spacing between buttons */
+}
+
+.login-form button[type="button"]:hover {
+  background-color: #cbd5e0; /* Slightly darker gray on hover */
+  color: #2d3748; /* Darker text on hover */
+}
+
+.login-form button[type="submit"] {
+  background-color: #2563eb; /* Blue background */
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-right: 10px;
+}
+
+.login-form button[type="submit"]:hover {
+  background-color: #1d4ed8; /* Darker blue on hover */
+}
+
