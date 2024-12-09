@@ -3,7 +3,7 @@ from functools import wraps
 from flask import request, jsonify
 from flask_socketio import disconnect
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from models import User
 
 class Auth:
@@ -13,7 +13,7 @@ class Auth:
     def generate_token(user_id: str) -> str:
         payload = {
             'user_id': user_id,
-            'exp': datetime.now(datetime.timezone.utc) + timedelta(days=1)
+            'exp': datetime.now(timezone.utc) + timedelta(days=1)
         }
         return jwt.encode(payload, Auth.SECRET_KEY, algorithm='HS256')
     
@@ -33,12 +33,14 @@ class Auth:
             try:
                 auth_header = request.args.get('token')
                 if not auth_header:
+                    print(f"Disconnect because authentification token is missing")
                     disconnect()
                     return False
                 
                 payload = Auth.decode_token(auth_header)
                 return f(payload['user_id'], *args, **kwargs)
             except Exception as e:
+                print("Disconnect because there was an error getting the token", e)
                 disconnect()
                 return False
         return decorated
