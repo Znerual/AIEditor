@@ -82,14 +82,14 @@ class SocketService {
     setupDebugListeners() {
         if (!this.socket) return;
 
-        this.socket.on('connect', () => {
+        this.socket.on('server_connects', () => {
             this.updateStatus('connected');
             if (this.debugMode) {
                 console.log(`[WebSocket] Connected with ID: ${this.socket.id}`);
             }
         });
 
-        this.socket.on('disconnect', (reason) => {
+        this.socket.on('server_disconnects', (reason) => {
             this.updateStatus('disconnected');
             if (this.debugMode) {
                 console.log('[WebSocket] Disconnected:', reason);
