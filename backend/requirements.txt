@@ -5,3 +5,6 @@ eventlet
 gunicorn
 quill-delta
 Flask-SQLAlchemy
+google-generativeai
+pyjwt
+psycopg2
