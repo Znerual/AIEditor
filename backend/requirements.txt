@@ -8,3 +8,5 @@ Flask-SQLAlchemy
 google-generativeai
 pyjwt
 psycopg2
+lxml
+cssutils
