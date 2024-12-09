@@ -1,18 +1,25 @@
 // src/App.js
 import React from 'react';
 import { AuthProvider } from './contexts/AuthContext';
-import { MainApp } from './components/MainApp';
-import { LoginForm } from './components/Login/LoginForm';
+import { MainApp } from './MainApp';
+import { AuthForm } from './components/Login/AuthForm';
 import { useAuth } from './contexts/AuthContext';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Import routing 
 
 const AppContent = () => {
   const { token } = useAuth();
 
-  if (!token) {
-    return <LoginForm />;
-  }
-
-  return <MainApp />;
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<AuthForm />} />
+        <Route
+          path="/"
+          element={token ? <MainApp /> : <AuthForm />} // Or a loading/splash component
+        />
+      </Routes>
+    </Router>
+  );
 };
 
 const App = () => {
