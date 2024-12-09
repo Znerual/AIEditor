@@ -1,0 +1,1982 @@
+# backend/src/app.py
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from flask_socketio import SocketIO
+from config import Config
+from socket_manager import SocketManager
+from cli import CLI
+import threading
+import logging
+import queue
+from models import db, User
+from auth import Auth
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('websocket_app')
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.setLevel(logging.WARNING)
+class FlaskApp:
+    def __init__(self):
+        self.app = Flask(__name__)
+        self.app.config.from_object(Config)
+
+        # Initialize database
+        db.init_app(self.app)
+        
+        # Create database tables
+        with self.app.app_context():
+            db.create_all()
+
+         # Initialize CORS
+        CORS(self.app, resources={
+            r"/*": {
+                "origins": Config.CORS_ORIGINS,
+                "supports_credentials": True,
+                "allow_headers": ["Content-Type", "Authorization"],
+                "methods": ["GET", "POST", "OPTIONS"]
+            }
+        })
+
+        self.message_queue = queue.Queue() # Create the message queue
+        self.socket_manager = SocketManager()
+        socketio = SocketIO(
+            app=self.app,
+            cors_allowed_origins=Config.CORS_ORIGINS,
+            async_mode='threading',
+            logger=False,
+            engineio_logger=False,
+            ping_timeout=60000,
+            ping_interval=25000,
+            manage_session=True,
+            always_connect=True,
+            #path='socket.io'
+        )
+
+        gemini_api_key = "1234" # read from environment variables
+
+        self.socket_manager.init_socket_manager(socketio, gemini_api_key, debug=Config.DEBUG)
+
+        # setup routes
+        self.setup_routes()
+
+    def setup_routes(self):
+        @self.app.route('/api/login', methods=['POST'])
+        def login():
+            data = request.get_json()
+            email = data.get('email')
+            password = data.get('password')
+            
+            user = User.query.filter_by(email=email).first()
+            if user and user.check_password(password):
+                token = Auth.generate_token(str(user.id))
+                return jsonify({
+                    'token': token,
+                    'user': {'id': user.id, 'email': user.email}
+                })
+            
+            return jsonify({'error': 'Invalid credentials'}), 401
+
+        @self.app.route('/api/register', methods=['POST'])
+        def register():
+            data = request.get_json()
+            email = data.get('email')
+            password = data.get('password')
+
+            print(f"Using trying to register with {data}")
+
+            if not email or not password:
+                return jsonify({'message': 'Email and password are required'}), 400
+            
+            existing_user = User.query.filter_by(email=email).first()
+            if existing_user:
+                return jsonify({'message': 'Email address already exists'}), 409  # 409 Conflict
+            
+            try:
+                new_user = User(email=email)
+                new_user.set_password(password)  # Hash the password
+                db.session.add(new_user)
+                db.session.commit()
+                return jsonify({'message': 'User registered successfully'}), 201
+            except Exception as e:
+                db.session.rollback()  # Rollback in case of error
+                print(f"Error during registration: {e}") # Log the error for debugging
+                return jsonify({'message': 'Registration failed'}), 500
+
+           
+
+        @self.app.route('/health')
+        def health_check():
+            return jsonify({"status": "healthy"})
+            
+        @self.app.route('/api/test')
+        def test_endpoint():
+            return jsonify({"message": "API is working"})
+        
+        @self.app.after_request
+        def after_request(response):
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+            return response
+
+    def run_cli(self):
+        cli = CLI(self.message_queue)
+        cli.start_cli()
+
+    def process_queue(self):
+        while True:
+            try:
+                self.socket_manager.socketio.sleep(1)  
+                message = self.message_queue.get()  # Non-blocking with timeout
+                print("Processing message from queue:", message)
+                # Simulate some work that might take time, but don't block
+                self.socket_manager.socketio.emit(
+                    message['event'], 
+                    message['data'], 
+                    namespace=message.get('namespace')
+                )
+                self.message_queue.task_done()
+            
+            except Exception as e:
+                print(f"Error processing message: {e}")
+
+    def run(self):
+        # Start CLI in a separate thread
+        cli_thread = threading.Thread(target=self.run_cli)
+        cli_thread.daemon = True
+        cli_thread.start()
+
+        message_queue_thread = self.socket_manager.socketio.start_background_task(self.process_queue)
+
+        # Run the Flask application
+        self.socket_manager.socketio.run(
+            self.app, 
+            debug=Config.DEBUG,
+            host='0.0.0.0',
+            port=5000,
+            allow_unsafe_werkzeug=True,
+            log_output=False, # hide heartbeat messages
+            use_reloader=False,
+            ) 
+
+if __name__ == '__main__':
+    app = FlaskApp()
+    app.run()
+
+
+
+# backend/src/auth.py
+from functools import wraps
+from flask import request, jsonify
+from flask_socketio import disconnect
+import jwt
+from datetime import datetime, timedelta, timezone
+from models import User
+
+class Auth:
+    SECRET_KEY = 'your-secret-key'  # Move to environment variables in production
+    
+    @staticmethod
+    def generate_token(user_id: str) -> str:
+        payload = {
+            'user_id': user_id,
+            'exp': datetime.now(timezone.utc) + timedelta(days=1)
+        }
+        return jwt.encode(payload, Auth.SECRET_KEY, algorithm='HS256')
+    
+    @staticmethod
+    def decode_token(token: str) -> dict:
+        try:
+            return jwt.decode(token, Auth.SECRET_KEY, algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            raise ValueError('Token has expired')
+        except jwt.InvalidTokenError:
+            raise ValueError('Invalid token')
+    
+    @staticmethod
+    def socket_auth_required(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            try:
+                auth_header = request.args.get('token')
+                if not auth_header:
+                    print(f"Disconnect because authentification token is missing")
+                    disconnect()
+                    return False
+                
+                payload = Auth.decode_token(auth_header)
+                return f(payload['user_id'], *args, **kwargs)
+            except Exception as e:
+                print("Disconnect because there was an error getting the token", e)
+                disconnect()
+                return False
+        return decorated
+
+
+
+# /src/autocompletion_manager.py
+
+import google.generativeai as genai
+import time
+
+class DebugResponse:
+    def __init__(self, text):
+        self.text = text
+class DebugModel:
+    def generate_content(self, prompt):
+        time.sleep(1)
+        return DebugResponse(f"Debug answer for prompt: {prompt}")
+
+class AutocompleteManager:
+    def __init__(self, api_key, debug=False):
+        self.debug = debug
+        if debug:
+            self.model = DebugModel()
+        else:
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+        
+    def get_suggestions(self, content, cursor_position):
+        """
+        Get autocompletion suggestions based on the current document content
+        and cursor position.
+        """
+        # Extract relevant context around cursor position
+        context_window = 1000  # Adjust based on your needs
+        start = max(0, cursor_position - context_window // 2)
+        end = min(len(content), cursor_position + context_window // 2)
+        context = content[start:end]
+        
+        prompt = f"""
+        Given the following text context and cursor position, suggest possible completions:
+        
+        Context: {context}
+        Cursor Position: {cursor_position - start}
+        
+        Provide 3 brief, relevant completion suggestions.
+        """
+        
+        try:
+            # Run Gemini API call in thread pool
+            response = self.model.generate_content(prompt)
+            
+            # Parse and format suggestions
+            suggestions = [
+                suggestion.strip()
+                for suggestion in response.text.split('\n')
+                if suggestion.strip()
+            ]
+            
+            return suggestions
+            
+        except Exception as e:
+            print(f"Error getting suggestions: {str(e)}")
+            return []
+
+
+
+# backend/src/cli.py
+
+import click
+import time
+from events import WebSocketEvent
+
+class CLI:
+    def __init__(self, message_queue):
+        self.message_queue = message_queue
+        self._last_event_name = None
+        self._last_event_data = None
+
+    def start_cli(self):
+        print("WebSocket CLI started. Type 'exit' to quit.")
+
+        while True:
+            try:
+                # Get event name input
+                event_name = input("\nEnter event name (or 'exit' to quit): ").strip()
+
+                if event_name.lower() == 'exit' or event_name.lower() == 'quit':
+                    print("Exiting CLI...")
+                    return
+
+                # Get event data input
+                event_data = input("Enter event data: ").strip()
+
+                event = WebSocketEvent(event_name, event_data)
+
+                # Debug print before putting on the queue
+                print(f"\nSending event to queue:")
+                print(f"  Name: {event.name}")
+                print(f"  Data: {event.data}")
+
+                # Put the event on the queue (instead of emitting directly)
+                self.send_server_event(event.name, event.data)
+
+                # Store last successful event
+                self._last_event_name = event_name
+                self._last_event_data = event_data
+
+                # Confirmation message (event added to queue)
+                print(f"✓ Event added to queue for processing")
+
+                # Small delay to prevent flooding
+                time.sleep(0.1)
+
+            except KeyboardInterrupt:
+                return
+            except Exception as e:
+                print(f"Error: {e}")
+
+    def send_server_event(self, event_name, data, namespace=None):
+        """
+        Puts the event data onto the message queue.
+        """
+        message = {
+            'event': event_name,
+            'data': data,
+            'namespace': namespace  # You can add namespace if needed
+        }
+        self.message_queue.put(message)
+
+
+
+# backend/src/config.py
+class Config:
+    SECRET_KEY = 'secret!'
+    DEBUG = True
+    # Allow connections from React development server
+    CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3000/", "*"] # http://localhost:3000
+    SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:1234@localhost:5432/eddy_db'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+
+
+
+# backend/src/document_manager.py
+from models import db, Document
+from typing import Optional
+from delta import Delta
+import json
+
+class DocumentManager:
+    @staticmethod
+    def get_or_create_document(user_id: str, document_id: Optional[int] = None) -> Document:
+        if document_id:
+            document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+            if document:
+                return document
+                
+        document = Document(user_id=user_id, content={"ops": []})
+        db.session.add(document)
+        db.session.commit()
+        return document
+    
+    @staticmethod
+    def apply_delta(document_id: int, user_id: str, delta: dict) -> dict:
+        document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+        if not document:
+            raise ValueError("Document not found")
+            
+        updated_content = document.apply_delta(delta)
+        db.session.commit()
+        return updated_content
+    
+    @staticmethod
+    def get_document_content(document_id: int, user_id: str) -> dict:
+        document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+        if not document:
+            raise ValueError("Document not found")
+        return Delta(document.content)
+
+
+
+
+# backend/src/events.py
+from dataclasses import dataclass
+from typing import Any, Optional
+
+@dataclass
+class WebSocketEvent:
+    name: str
+    data: Any
+
+
+
+# backend/src/models.py
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime, timezone
+from werkzeug.security import generate_password_hash, check_password_hash
+import json
+from delta import Delta
+db = SQLAlchemy()
+
+class User(db.Model):
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    last_login_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+    
+
+class Document(db.Model):
+    __tablename__ = 'documents'
+    
+    id = db.Column(db.String(36), primary_key=True, unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    content = db.Column(db.JSON, nullable=False, default={})
+    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    
+    user = db.relationship('User', backref=db.backref('documents', lazy=True))
+
+    def apply_delta(self, delta):
+        """Apply a Quill delta to the document content"""
+        if not self.content:
+            self.content = {'ops': []}  # Initialize as dictionary with ops array
+       
+        current_content = Delta(self.content['ops'] if isinstance(self.content, dict) else self.content)
+        
+        if isinstance(delta, str):
+            delta = Delta(json.loads(delta))
+        elif isinstance(delta, list):
+            delta = Delta(delta)
+        elif not isinstance(delta, Delta):
+            raise ValueError(f"Unknown delta type {type(delta)}")
+        
+        # Compose the deltas
+        new_content = current_content.compose(delta)
+        
+        # Store the ops array in the content field
+        self.content = {'ops': new_content.ops}
+        
+        self.updated_at = datetime.now(timezone.utc)
+        return self.content['ops']
+    
+
+
+
+# backend/src/socket_manager.py
+from flask import session
+from flask_socketio import SocketIO, join_room, leave_room
+from typing import Optional
+from events import WebSocketEvent
+from document_manager import DocumentManager
+from auth import Auth
+from autocomplete_manager import AutocompleteManager
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+from models import Document, db
+from sqlalchemy.exc import IntegrityError
+from delta import Delta
+import uuid
+import threading
+
+class SocketManager:
+    _instance: Optional['SocketManager'] = None
+    _socketio: Optional[SocketIO] = None
+    _autocomplete_manager: Optional[AutocompleteManager] = None
+    _executor: Optional[ThreadPoolExecutor] = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def init_socket_manager(self, socketio, gemini_api_key, debug=False):
+        self._socketio = socketio
+        self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key, debug=debug)
+        self._executor = ThreadPoolExecutor(max_workers=5)
+        self._setup_handlers()
+
+
+    def _setup_handlers(self):
+
+        # client connects to server
+        @self._socketio.on('connect')
+        def handle_connect():
+            self.emit_event(WebSocketEvent("server_connects", {}))
+            print("Client connected, before authentification")
+
+        # client disconnects from server
+        @self._socketio.on('disconnect')
+        def handle_disconnect():
+            try:
+                # Client is disconnecting, leave the document room
+                document_id = session.get('document_id')
+                if document_id:
+                    leave_room(document_id)
+                    print(f"Client left room {document_id}")  # Log leaving room for debug
+                print('Client disconnected') # Log disconnect for debug
+
+            except KeyError as e:
+                print(f"Error during disconnect: {e}")
+
+
+        @self._socketio.on('client_authenticates')
+        @Auth.socket_auth_required
+        def handle_client_authenticates(user_id, data): 
+            print("Client tries to authenticate")
+            try:
+                # Generate a unique document ID and ensure it doesn't already exist
+                while True:
+                    document_id = str(uuid.uuid4())
+                    if not Document.query.filter_by(id=document_id).first():
+                        break
+
+                # Create a new document for the user
+                new_document = Document(id=document_id, user_id=user_id)
+                new_document.apply_delta(Delta([{'insert' : 'Hallo das ist ein Testdokument'}]))
+                db.session.add(new_document)
+                db.session.commit()
+
+                # Store the document ID in the session for this client
+                session['document_id'] = document_id
+
+                # Join the room specific to the document ID
+                join_room(document_id)
+
+                print(f'Client authenticated: user_id={user_id}, document_id={document_id}')
+
+                # Send the document ID to the newly connected client
+                self.emit_event(WebSocketEvent('server_document_created', {'documentId': document_id}))
+
+                return True # Return True to acknowledge successful authentication
+            
+            except IntegrityError as e:
+                db.session.rollback()
+                print("Database integrity error while creating document ", e)
+                self.emit_event(WebSocketEvent('authentication_failed', {'message': 'Database integrity error'}))
+                return False
+
+            except Exception as e:
+                print(f"Authentication or room joining error: {e}")
+                self.emit_event(WebSocketEvent('authentication_failed', {'message': str(e)}))  # Emit an error event
+                return False # Return False to indicate authentication failure
+           
+        @self._socketio.on('client_get_document')
+        @Auth.socket_auth_required
+        def handle_client_get_document(user_id, data):
+            try:
+                document_id = data.get('documentId')
+                
+                if not document_id:
+                    print(data)
+                    raise ValueError("Missing documentId field in handle_get_document")
+                
+                content = DocumentManager.get_document_content(document_id, user_id)
+                self._socketio.emit('server_sent_document_content', {
+                    'documentId': document_id,
+                    'content': content.ops
+                })
+                
+            except Exception as e:
+                print(f"Error getting document: {str(e)}")
+                self._socketio.emit('error', {'message': str(e)})
+        
+        @self._socketio.on('client_text_change')
+        @Auth.socket_auth_required
+        def handle_client_text_change(user_id, data):
+            try:
+                document_id = data.get('documentId')
+                delta = data.get('delta')
+                cursor_position = data.get('cursorPosition', 0)
+                
+                if not all([document_id, delta]):
+                    raise ValueError("Missing required fields documentId or delta in handle_text_change")
+                
+
+                # User ID comes from the token, not the request
+                updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
+                
+
+                # Broadcast the delta to all other clients in the same document room (except the sender)
+                self.emit_event(WebSocketEvent('client_text_change', data), room=document_id, include_self=False)
+
+                 # Get and emit autocompletion suggestions
+                suggestions = self._autocomplete_manager.get_suggestions(
+                    updated_content,
+                    cursor_position
+                )
+
+                
+                if suggestions:
+                    self.emit_event(WebSocketEvent('server_autocompletion_suggestions', {
+                        'documentId': document_id,
+                        'suggestions': suggestions,
+                        'cursorPosition': cursor_position
+                    }))
+                
+            except Exception as e:
+                print(f"Error handling text change: {str(e)}")
+                self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
+        
+        
+        
+        @self._socketio.on('client_chat')
+        def handle_chat_event(msg):
+            self._socketio.emit("server_chat_answer", f"Answer: {msg}")
+    
+    def emit_event(self, event: WebSocketEvent, **kwargs):
+        if self._socketio is None:
+            raise RuntimeError("SocketIO not initialized")
+        
+        try:
+            print(f"🚀 Emitting event '{event.name}' with data: {event.data} and kwargs {kwargs}")
+            self._socketio.emit(event.name, event.data, **kwargs)
+            print(f"✅ Successfully emitted event '{event.name}'")
+            return True
+        except Exception as e:
+            print(f"❌ Error emitting event: {str(e)}")
+            return False
+    
+    @property
+    def socketio(self):
+        return self._socketio
+    
+    def __del__(self):
+        if self._executor:
+            self._executor.shutdown(wait=False)
+
+
+
+// frontend/src/App.js
+import React from 'react';
+import { AuthProvider } from './contexts/AuthContext';
+import { MainApp } from './MainApp';
+import { AuthForm } from './components/Login/AuthForm';
+import { useAuth } from './contexts/AuthContext';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Import routing 
+
+const AppContent = () => {
+  const { token } = useAuth();
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<AuthForm />} />
+        <Route
+          path="/"
+          element={token ? <MainApp /> : <AuthForm />} // Or a loading/splash component
+        />
+      </Routes>
+    </Router>
+  );
+};
+
+const App = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+};
+
+export default App;
+
+
+
+// frontend/src/App.test.js
+import { render, screen } from '@testing-library/react';
+import App from '.';
+
+test('renders learn react link', () => {
+  render(<App />);
+  const linkElement = screen.getByText(/learn react/i);
+  expect(linkElement).toBeInTheDocument();
+});
+
+
+
+
+// frontend/src/index.js
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import './styles/globals.css'
+import App from './App.js';
+import reportWebVitals from './reportWebVitals';
+import { AuthProvider } from './contexts/AuthContext';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+
+
+
+
+// frontend/src/MainApp.js
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import ReactQuill from 'react-quill';
+import { delta } from 'react-quill';
+import { useWebSocket } from './hooks/useWebSocket';
+import { EditorToolbar } from './components/Editor/EditorToolbar';
+import { FileUpload } from './components/Sidebar/FileUpload';
+import { ChatWindow } from './components/Chat/ChatWindow';
+import { DebugPanel } from './components/Debug/DebugPanel';
+import { useAuth } from './contexts/AuthContext';
+import 'react-quill/dist/quill.snow.css';
+
+// Import CSS files
+import './styles/App.css';
+import './styles/components.css';
+import './styles/globals.css'; 
+
+export const MainApp = () => {
+    // State management
+    const [uploadedStructureFile, setUploadedStructureFile] = useState();
+    const [uploadedContentFiles, setUploadedContentFiles] = useState([]);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [debugEvents, setDebugEvents] = useState([]);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [editorContent, setEditorContent] = useState('');
+    const [documentId, setDocumentId] = useState('');
+    const [cursorPosition, setCursorPosition] = useState();
+    const quillRef = useRef(null);
+    const { user, logout } = useAuth();
+
+    const handleStructureParsed = useCallback((newContent) => {
+        setEditorContent(newContent);
+    }, []);
+
+    const handleStructureUpload = useCallback((file) => {
+        console.log("Handling structure upload", file);
+        setUploadedStructureFile(file);
+        // Implementation for structure upload
+    }, []);
+
+    const handleContentUpload = useCallback((files) => {
+        console.log("Handling content upload", files);
+        setUploadedContentFiles(files);
+        // Implementation for content upload
+    }, []);
+
+    const handleChatAnswer = useCallback((answer) => {
+        console.log('Received chat answer:', answer);
+        setChatMessages(prev => [...prev, { text: answer, sender: 'server' }]);
+    }, []);
+
+    // Handler functions
+    const handleAutocompletion = useCallback((event) => {
+        console.log("Show Autocompletion", event);
+        const suggestions_delta = delta();
+        suggestions_delta.insert(event.suggestions)
+        // Implementation for autocompletion
+    }, []);
+
+    const handleChatSubmit = useCallback((message) => {
+        if (message.trim()) {
+          setChatMessages([...chatMessages, { text: message, sender: 'user' }]);
+          emit('client_chat', { text: message });
+        }
+      }, [chatMessages]);
+
+    const handleDocumentCreated = useCallback((event) => {
+        console.log("Received document id ",event.documentId);
+        setDocumentId(event.documentId);
+        emit('client_get_document', { documentId: event.documentId });
+    }, [setDocumentId]);
+
+    const handleGetContent = useCallback((event) => {
+        console.log("Received document", event); // event has document_id and content fields
+        if (event && event.content) {
+            setEditorContent(event.content);
+            setDocumentId(event.documentId);
+        }
+    }, [setDocumentId, setEditorContent]);
+
+    const socketEvents = useMemo(() => ({
+        server_connects: () => console.log('server connected'),
+        server_disconnects: () => console.log('server disconnected'),
+        server_document_created: handleDocumentCreated,
+        server_sent_document_content: handleGetContent,
+        disconnect: () => console.log('disconnected'),
+        server_autocompletion_suggestions: handleAutocompletion,
+        server_chat_answer: handleChatAnswer,
+        structure_parsed: handleStructureParsed,
+        test: () => console.log("Test Event"),
+    }), [handleDocumentCreated]); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
+
+
+    const { emit, status, debugEvents: wsDebugEvents } = useWebSocket(socketEvents);
+
+    // Update debug events whenever websocket events occur
+    useEffect(() => {
+        setDebugEvents(wsDebugEvents);
+    }, [wsDebugEvents]);
+
+    const handleEditorChange = useCallback((content, delta, source, editor) => {
+        console.log('Editor change source: ', source)
+        if (source === 'user') {
+            const ops = delta.ops;
+            emit('client_text_change', { delta: ops, documentId: documentId, cursorPosition: cursorPosition });
+        }
+        setEditorContent(content);
+
+        if (process.env.REACT_APP_DEBUG) {
+            setDebugEvents(prev => [...prev, { 
+                type: 'editor_change',
+                content,
+                delta,
+                timestamp: new Date()
+            }]);
+        }
+    }, [documentId, cursorPosition]);
+
+    const handleEditorSelectionChange = useCallback((range, source, editor) => {
+        if (range && documentId) {
+            setCursorPosition(range.index);
+            // emit('client_cursorPosition', { documentId: documentId, cursorPosition: range.index });
+        }
+    }, [documentId]);
+
+    // Event handlers
+    // const handleEditorChange = useCallback((content, delta, source, editor) => {
+    //     const ops = delta.ops
+    //     emit('text_change', {delta: ops, document_id: documentId, cursorPosition} );
+    //     setEditorContent(content);
+    //     if (process.env.REACT_APP_DEBUG) {
+    //         setDebugEvents(prev => [...prev, { 
+    //             type: 'editor_change',
+    //             content,
+    //             delta,
+    //             timestamp: new Date()
+    //         }]);
+    //     }
+    // }, [emit, setEditorContent]);
+
+    return (
+        <div className="app-container">
+            <EditorToolbar 
+                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
+                sidebarOpen={sidebarOpen}
+            />
+            
+            <div className="main-content">
+                <div className={`sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+                  <div className="sidebar-content">
+                      <FileUpload 
+                          title="Structure Template" 
+                          onUpload={handleStructureUpload}
+                          uploadedFiles={uploadedStructureFile}
+                      />
+                      <FileUpload 
+                          title="Content Files" 
+                          onUpload={handleContentUpload}
+                          multiple 
+                          uploadedFiles={uploadedContentFiles}
+                      />
+                      <ChatWindow 
+                          messages={chatMessages}
+                          onSend={handleChatSubmit}
+                      />
+                      <button onClick={logout}>Logout</button>
+                  </div>
+                </div>
+                <div className="editor-container">
+                    <ReactQuill
+                        ref={quillRef}
+                        value={editorContent}
+                        onChange={handleEditorChange}
+                        onChangeSelection={handleEditorSelectionChange}
+                        modules={{
+                            toolbar: [
+                                [{ header: [1, 2, 3, false] }],
+                                ['bold', 'italic', 'underline', 'strike'],
+                                [{ list: 'ordered' }, { list: 'bullet' }],
+                                [{ color: [] }, { background: [] }],
+                                ['clean']
+                            ]
+                        }}
+                    />
+                </div>
+
+                {process.env.REACT_APP_DEBUG && (
+                    <DebugPanel 
+                        events={debugEvents}
+                        socketStatus={status}
+                    />
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+
+
+
+// frontend/src/reportWebVitals.js
+const reportWebVitals = onPerfEntry => {
+  if (onPerfEntry && onPerfEntry instanceof Function) {
+    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+      getCLS(onPerfEntry);
+      getFID(onPerfEntry);
+      getFCP(onPerfEntry);
+      getLCP(onPerfEntry);
+      getTTFB(onPerfEntry);
+    });
+  }
+};
+
+export default reportWebVitals;
+
+
+
+
+// jest-dom adds custom jest matchers for asserting on DOM nodes.
+// allows you to do things like:
+// expect(element).toHaveTextContent(/react/i)
+// learn more: https://github.com/testing-library/jest-dom
+import '@testing-library/jest-dom';
+
+
+
+
+// frontend/src/components/Chat/ChatWindow.js
+import { useCallback, useState } from 'react';
+import ReactQuill from 'react-quill';
+import { Button } from '../ui/button';
+import { Send } from 'lucide-react';
+
+export const ChatWindow = ({ messages, onSend }) => {
+    const [input, setInput] = useState('');
+
+    const handleSubmit = useCallback(() => {
+        if (input.trim()) {
+            onSend(input);
+            setInput('');
+        }
+    }, [input, onSend]);
+
+    return (
+        <div className="chat-section">
+            <h2 className="font-medium mb-4">Chat</h2>
+            <div className="chat-messages">
+            {messages.map((message, index) => (
+                <div
+                key={index}
+                className={`message ${
+                    message.sender === 'user' ? 'message-user' : 'message-other'
+                }`}
+                >
+                {message.text}
+                </div>
+            ))}
+            </div>
+            <div className="chat-input-container">
+            <ReactQuill
+            value={input}
+            onChange={setInput}
+            modules={{ toolbar: false }}
+            />
+            <Button onClick={handleSubmit}>
+            <Send className="h-4 w-4" />
+            </Button>
+            </div>
+        </div>
+    );
+};
+
+
+
+
+
+
+
+// frontend/src/components/Debug/DebugPanel.js
+export const DebugPanel = ({ events, socketStatus }) => {
+    if (!process.env.REACT_APP_DEBUG) return null;
+
+    return (
+        <div className="debug-panel">
+            <h3>Debug Information</h3>
+            <div className="mb-4">
+                <strong>Socket Status:</strong> 
+                <span className={`ml-2 ${socketStatus === 'connected' ? 'text-green-500' : 'text-red-500'}`}>
+                    {socketStatus}
+                </span>
+            </div>
+            <div className="events-section">
+                <strong>Recent Events:</strong>
+                {events.length === 0 ? (
+                    <div className="text-gray-500 mt-2">No events yet</div>
+                ) : (
+                    <div className="events-list">
+                        {events.map((event, index) => (
+                            <div key={index} className="mb-2 p-2 bg-gray-100 rounded">
+                                <div><strong>Event:</strong> {event.event}</div>
+                                <div><strong>Type:</strong> {event.type || 'received'}</div>
+                                <div><strong>Time:</strong> {new Date(event.timestamp).toLocaleTimeString()}</div>
+                                <div>
+                                    <strong>Data:</strong>
+                                    <pre className="text-sm mt-1">
+                                        {JSON.stringify(event.data, null, 2)}
+                                    </pre>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+
+// frontend/src/components/Editor/EditorToolbar.js
+import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, 
+    MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, 
+    MenubarSubTrigger, MenubarTrigger } from '../ui/menubar';
+import { Button } from '../ui/button';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
+
+export const EditorToolbar = ({ onToggleSidebar, sidebarOpen }) => {
+    return (
+      <div className="menubar-container">
+        <div className="menubar-content">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={onToggleSidebar}
+            className="toggle-button"
+          >
+            {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
+          </Button>
+          <Menubar className="border-none">
+            <MenubarMenu>
+              <MenubarTrigger>File</MenubarTrigger>
+              <MenubarContent>
+                <MenubarItem>New Tab <MenubarShortcut>⌘T</MenubarShortcut></MenubarItem>
+                <MenubarItem>Open <MenubarShortcut>⌘O</MenubarShortcut></MenubarItem>
+                <MenubarItem>Save <MenubarShortcut>⌘S</MenubarShortcut></MenubarItem>
+                <MenubarSeparator />
+                <MenubarSub>
+                  <MenubarSubTrigger>Share</MenubarSubTrigger>
+                  <MenubarSubContent>
+                    <MenubarItem>Email link</MenubarItem>
+                    <MenubarItem>Messages</MenubarItem>
+                    <MenubarItem>Notes</MenubarItem>
+                  </MenubarSubContent>
+                </MenubarSub>
+                <MenubarSeparator />
+                <MenubarItem>Print... <MenubarShortcut>⌘P</MenubarShortcut></MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+              <MenubarTrigger>Edit</MenubarTrigger>
+              <MenubarContent>
+                <MenubarItem>Undo <MenubarShortcut>⌘Z</MenubarShortcut></MenubarItem>
+                <MenubarItem>Redo <MenubarShortcut>⇧⌘Z</MenubarShortcut></MenubarItem>
+                <MenubarSeparator />
+                <MenubarSub>
+                  <MenubarSubTrigger>Find</MenubarSubTrigger>
+                  <MenubarSubContent>
+                    <MenubarItem>Find... <MenubarShortcut>⌘F</MenubarShortcut></MenubarItem>
+                    <MenubarItem>Find Next</MenubarItem>
+                    <MenubarItem>Find Previous</MenubarItem>
+                  </MenubarSubContent>
+                </MenubarSub>
+                <MenubarSeparator />
+                <MenubarItem>Cut</MenubarItem>
+                <MenubarItem>Copy</MenubarItem>
+                <MenubarItem>Paste</MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+              <MenubarTrigger>View</MenubarTrigger>
+              <MenubarContent>
+                <MenubarCheckboxItem onClick={onToggleSidebar}>
+                  Show Sidebar
+                </MenubarCheckboxItem>
+                <MenubarSeparator />
+                <MenubarItem>Toggle Fullscreen</MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+          </Menubar>
+        </div>
+      </div>
+    );
+  };
+
+
+
+// frontend/src/components/Login/AuthForm.js
+import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import Confetti from 'react-confetti';
+
+export const AuthForm  = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false); // State to toggle between login and register
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+        if (isRegistering) {
+            const response = await register(email, password);
+            if (response && response.message !== 'User registered successfully') {
+                throw new Error(response.message || 'Registration failed');
+            }
+            // Play success animation
+            setSuccess(true);
+
+            // Switch to login after animation
+            setTimeout(() => {
+                setIsRegistering(false);
+                setSuccess(false);
+                navigate('/');
+            }, 8000);
+
+        } else {
+            await login(email, password);
+            navigate('/');
+        }
+
+    } catch (err) {
+        setError(err.message || (isRegistering ? 'Registration failed' : 'Login failed'));
+    }
+};
+
+return (
+    <div className="login-container">
+        <form onSubmit={handleSubmit} className="login-form">
+            {success && <Confetti />} {/* Display confetti when success is true */}
+            {success && <div className="success-message">Registration Successful!</div>}
+            {error && <div className="error-message">{error}</div>}
+            <div className="form-group">
+                <label htmlFor="email">Email</label>
+                <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                />
+            </div>
+            <div className="form-group">
+                <label htmlFor="password">Password</label>
+                <input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                />
+            </div>
+            {/* Conditional rendering of buttons */}
+            <div>
+                <button type="submit">{isRegistering ? 'Register' : 'Login'}</button>
+                <button type="button" onClick={() => setIsRegistering(!isRegistering)}>
+                    {isRegistering ? 'Switch to Login' : 'Switch to Register'}
+                </button>
+            </div>
+        </form>
+    </div>
+);
+};
+
+
+
+// frontend/src/components/Sidebar/FileUpload.js
+import { Card } from '../ui/card'
+import { Upload } from 'lucide-react';
+
+export const FileUpload = ({ title, onUpload, multiple = false, uploadedFiles = []}) => {
+    return (
+        <div className="upload-section">
+            <h2 className="font-medium mb-4">{title}</h2>
+            <Card className="upload-card">
+            <div className="upload-container">
+                <Upload className="upload-icon" />
+                <input
+                type="file"
+                onChange={onUpload}
+                className="hidden"
+                id="structure-upload"
+                {...(multiple ? { multiple: true } : {})} // Add multiple attribute if true
+                />
+                <label
+                htmlFor="structure-upload"
+                className="upload-label"
+                >
+                Upload Template
+                </label>
+            </div>
+            </Card>
+            {multiple && ( // Conditionally render file-list only if multiple is true
+                <div className="file-list">
+                    {uploadedFiles.map((file, index) => (
+                        <div key={index} className="file-item">
+                            {file.name}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+
+// frontend/src/components/ui/button.tsx
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "src/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default:
+          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-10 rounded-md px-8",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+
+
+
+
+// frontend/src/components/ui/card.tsx
+import * as React from "react"
+
+import { cn } from "src/lib/utils"
+
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-xl border bg-card text-card-foreground shadow",
+      className
+    )}
+    {...props}
+  />
+))
+Card.displayName = "Card"
+
+const CardHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn("font-semibold leading-none tracking-tight", className)}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+CardDescription.displayName = "CardDescription"
+
+const CardContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+))
+CardContent.displayName = "CardContent"
+
+const CardFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+))
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
+
+
+
+// frontend/src/components/ui/collapsible.tsx
+import * as CollapsiblePrimitive from "@radix-ui/react-collapsible"
+
+const Collapsible = CollapsiblePrimitive.Root
+
+const CollapsibleTrigger = CollapsiblePrimitive.CollapsibleTrigger
+
+const CollapsibleContent = CollapsiblePrimitive.CollapsibleContent
+
+export { Collapsible, CollapsibleTrigger, CollapsibleContent }
+
+
+
+
+// frontend/src/components/ui/menubar.tsx
+import * as React from "react"
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  DotFilledIcon,
+} from "@radix-ui/react-icons"
+import * as MenubarPrimitive from "@radix-ui/react-menubar"
+
+import { cn } from "src/lib/utils"
+
+const MenubarMenu = MenubarPrimitive.Menu
+
+const MenubarGroup = MenubarPrimitive.Group
+
+const MenubarPortal = MenubarPrimitive.Portal
+
+const MenubarSub = MenubarPrimitive.Sub
+
+const MenubarRadioGroup = MenubarPrimitive.RadioGroup
+
+const Menubar = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.Root
+    ref={ref}
+    className={cn(
+      "flex h-9 items-center space-x-1 rounded-md border bg-background p-1 shadow-sm",
+      className
+    )}
+    {...props}
+  />
+))
+Menubar.displayName = MenubarPrimitive.Root.displayName
+
+const MenubarTrigger = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Trigger>
+>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "flex cursor-default select-none items-center rounded-sm px-3 py-1 text-sm font-medium outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
+      className
+    )}
+    {...props}
+  />
+))
+MenubarTrigger.displayName = MenubarPrimitive.Trigger.displayName
+
+const MenubarSubTrigger = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.SubTrigger> & {
+    inset?: boolean
+  }
+>(({ className, inset, children, ...props }, ref) => (
+  <MenubarPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <ChevronRightIcon className="ml-auto h-4 w-4" />
+  </MenubarPrimitive.SubTrigger>
+))
+MenubarSubTrigger.displayName = MenubarPrimitive.SubTrigger.displayName
+
+const MenubarSubContent = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.SubContent>
+>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.SubContent
+    ref={ref}
+    className={cn(
+      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      className
+    )}
+    {...props}
+  />
+))
+MenubarSubContent.displayName = MenubarPrimitive.SubContent.displayName
+
+const MenubarContent = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Content>
+>(
+  (
+    { className, align = "start", alignOffset = -4, sideOffset = 8, ...props },
+    ref
+  ) => (
+    <MenubarPrimitive.Portal>
+      <MenubarPrimitive.Content
+        ref={ref}
+        align={align}
+        alignOffset={alignOffset}
+        sideOffset={sideOffset}
+        className={cn(
+          "z-50 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          className
+        )}
+        {...props}
+      />
+    </MenubarPrimitive.Portal>
+  )
+)
+MenubarContent.displayName = MenubarPrimitive.Content.displayName
+
+const MenubarItem = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Item> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <MenubarPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+MenubarItem.displayName = MenubarPrimitive.Item.displayName
+
+const MenubarCheckboxItem = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.CheckboxItem>
+>(({ className, children, checked, ...props }, ref) => (
+  <MenubarPrimitive.CheckboxItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    checked={checked}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <MenubarPrimitive.ItemIndicator>
+        <CheckIcon className="h-4 w-4" />
+      </MenubarPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </MenubarPrimitive.CheckboxItem>
+))
+MenubarCheckboxItem.displayName = MenubarPrimitive.CheckboxItem.displayName
+
+const MenubarRadioItem = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.RadioItem>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.RadioItem>
+>(({ className, children, ...props }, ref) => (
+  <MenubarPrimitive.RadioItem
+    ref={ref}
+    className={cn(
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <MenubarPrimitive.ItemIndicator>
+        <DotFilledIcon className="h-4 w-4 fill-current" />
+      </MenubarPrimitive.ItemIndicator>
+    </span>
+    {children}
+  </MenubarPrimitive.RadioItem>
+))
+MenubarRadioItem.displayName = MenubarPrimitive.RadioItem.displayName
+
+const MenubarLabel = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Label> & {
+    inset?: boolean
+  }
+>(({ className, inset, ...props }, ref) => (
+  <MenubarPrimitive.Label
+    ref={ref}
+    className={cn(
+      "px-2 py-1.5 text-sm font-semibold",
+      inset && "pl-8",
+      className
+    )}
+    {...props}
+  />
+))
+MenubarLabel.displayName = MenubarPrimitive.Label.displayName
+
+const MenubarSeparator = React.forwardRef<
+  React.ElementRef<typeof MenubarPrimitive.Separator>,
+  React.ComponentPropsWithoutRef<typeof MenubarPrimitive.Separator>
+>(({ className, ...props }, ref) => (
+  <MenubarPrimitive.Separator
+    ref={ref}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
+    {...props}
+  />
+))
+MenubarSeparator.displayName = MenubarPrimitive.Separator.displayName
+
+const MenubarShortcut = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span
+      className={cn(
+        "ml-auto text-xs tracking-widest text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+MenubarShortcut.displayname = "MenubarShortcut"
+
+export {
+  Menubar,
+  MenubarMenu,
+  MenubarTrigger,
+  MenubarContent,
+  MenubarItem,
+  MenubarSeparator,
+  MenubarLabel,
+  MenubarCheckboxItem,
+  MenubarRadioGroup,
+  MenubarRadioItem,
+  MenubarPortal,
+  MenubarSubContent,
+  MenubarSubTrigger,
+  MenubarGroup,
+  MenubarSub,
+  MenubarShortcut,
+}
+
+
+
+
+// frontend/src/contexts/AuthContext.js
+import React, { createContext, useState, useContext, useCallback } from 'react';
+
+const AuthContext = createContext(null);
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
+
+  const login = useCallback(async (email, password) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      setUser(data.user);
+      setToken(data.token);
+      localStorage.setItem('token', data.token);
+      return data;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  }, []);
+
+  const register = useCallback(async (email, password) => {
+    try {
+      
+      const response = await fetch('http://localhost:5000/api/register', { // API endpoint for registration
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json(); // Get error details from response
+        throw new Error(errorData.message || 'Registration failed'); // Throw error with message
+      }
+
+      // Registration successful, you might want to redirect to login here
+      return await response.json();
+
+    } catch (error) {
+        // Handle specific errors, if necessary
+        console.error('Registration error:', error);
+        throw error; // Re-throw the error to be caught by the component
+    }
+  }, []);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('token');
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, token, login, logout, register }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+
+
+// frontend/src/hooks/useWebSocket.js
+import { useEffect, useCallback, useState, useRef } from 'react';
+import { socketService } from '../services/socket.service';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+
+export const useWebSocket = (events) => {
+    const { token } = useAuth(); // Get token from auth context
+    const [status, setStatus] = useState(socketService.getStatus());
+    const [debugEvents, setDebugEvents] = useState([]);
+    const eventsRef = useRef(events);
+    const navigate = useNavigate();
+
+    // Update events ref when events change
+    useEffect(() => {
+        eventsRef.current = events;
+    }, [events]);
+
+    useEffect(() => {
+        if (!token) {
+            socketService.disconnect();
+            setStatus('unauthorized');
+            console.log('Disconnect because there is no access token, login first')
+            navigate('/'); // send user to login form
+            return;
+        }
+
+        const socket = socketService.connect();
+        if (!socket) return;
+
+        // Start the authentication handshake with the jwt
+        socket.on('server_connects', () => {
+            socket.emit('client_authenticates', { token }); // Emit authentication event with token
+        });
+
+        // Setup status listener
+        const handleStatus = (newStatus) => {
+            setStatus(newStatus);
+        };
+        socketService.addStatusListener(handleStatus);
+
+        // Wrap each event handler to track debug events
+        const wrappedHandlers = Object.entries(events).reduce((acc, [event, handler]) => {
+            acc[event] = (...args) => {
+                // Add to debug events
+                setDebugEvents(prev => [...prev, {
+                    event,
+                    data: args,
+                    type: 'received',
+                    timestamp: new Date().toISOString()
+                }]);
+                
+                // Call original handler
+                handler(...args);
+
+                if (typeof handler === 'function') {  // Check if handler is a function
+                    console.log(`Attached listener for event: ${event}`);
+                } else {
+                    console.error(`Handler for event '${event}' is not a function:`, handler);
+                }
+            };
+            return acc;
+        }, {});
+
+        // Setup event listeners
+        Object.entries(wrappedHandlers).forEach(([event, handler]) => {
+            socket.on(event, handler);
+            console.log(`[WebSocket] Registered listener for: ${event}`);
+        });
+
+        // Add a catch-all listener for debugging
+        socket.onAny((eventName, ...args) => {
+            console.log(`[WebSocket] Received event: ${eventName}`, args);
+        });
+
+        return () => {
+            // Cleanup event listeners
+            if (socket) {
+                Object.keys(eventsRef.current).forEach((event) => {
+                    socket.off(event);
+                });
+            }
+            socketService.removeStatusListener(handleStatus);
+            socketService.disconnect();
+            console.log("[WebSocket] Cleanup complete");
+        };
+    }, [token, events]);
+
+    const emit = useCallback((event, data) => {
+        socketService.emit(event, data);
+
+        // Track emitted events in debug panel
+        setDebugEvents(prev => [...prev, {
+            event,
+            data,
+            type: 'sent',
+            timestamp: new Date().toISOString()
+        }]);
+    }, []);
+
+    return { emit, status, debugEvents };
+};
+
+
+
+// frontend/src/services/socket.service.js
+import { io } from 'socket.io-client';
+
+class SocketService {
+    constructor() {
+        this.socket = null;
+        this.debugMode = process.env.REACT_APP_DEBUG === 'true';
+        this.statusListeners = new Set();
+        this.activeConnections = 0;
+        this.currentStatus = 'disconnected';
+    }
+
+    updateStatus(newStatus) {
+        this.currentStatus = newStatus; // Update the current status
+        this.notifyStatusListeners(newStatus); // Notify listeners
+    }
+
+    addStatusListener(listener) {
+        this.statusListeners.add(listener);
+        // Immediately notify of current status
+        if (this.socket) {
+            listener(this.socket.connected ? 'connected' : 'disconnected');
+        }
+    }
+
+    removeStatusListener(listener) {
+        this.statusListeners.delete(listener);
+    }
+
+    notifyStatusListeners(status) {
+        this.statusListeners.forEach(listener => listener(status));
+    }
+
+
+    connect() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            this.updateStatus('unauthorized');
+            return null;
+        }
+
+        if (this.socket?.connected) {
+            return this.socket;
+        }
+
+        if (this.socket) {
+            this.socket.close();
+            this.socket = null;
+        }
+
+        this.socket = io('http://localhost:5000', {
+            query: { token },
+            transports: ['websocket', 'polling'],  // Allow fallback to polling
+            debug: this.debugMode,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000,
+            autoConnect: true,
+            withCredentials: true,
+            // path: 'socket.io'
+        });
+
+        this.activeConnections += 1;
+        this.setupDebugListeners();
+        return this.socket;
+    }
+
+    disconnect() {
+       this.activeConnections -= 1;
+        if (this.activeConnections === 0 && this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
+        }
+        this.updateStatus('disconnected');
+        if (this.debugMode) {
+            console.log('[WebSocket] Disconnected');
+        }
+    }
+
+    setupDebugListeners() {
+        if (!this.socket) return;
+
+        this.socket.on('server_connects', () => {
+            this.updateStatus('connected');
+            if (this.debugMode) {
+                console.log(`[WebSocket] Connected with ID: ${this.socket.id}`);
+            }
+        });
+
+        this.socket.on('server_disconnects', (reason) => {
+            this.updateStatus('disconnected');
+            if (this.debugMode) {
+                console.log('[WebSocket] Disconnected:', reason);
+            }
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('[WebSocket] Connection error:', error);
+            // Try to reconnect using polling if websocket fails
+            if (this.socket.io.opts.transports[0] === 'websocket') {
+                console.log('[WebSocket] Falling back to polling');
+                this.socket.io.opts.transports = ['polling', 'websocket'];
+            }
+            if (error.message.includes('authentication')) {
+                this.updateStatus('unauthorized');
+                // Optional: Clear invalid token
+                localStorage.removeItem('token');
+            } else {
+                this.updateStatus('error');
+            }
+        });
+
+        if (this.debugMode) {
+            this.socket.onAny((event, ...args) => {
+                console.log(`[WebSocket] Event: ${event}`, args);
+            });
+
+            this.socket.io.on('ping', () => {
+                console.log('[WebSocket] Ping sent');
+            });
+
+            this.socket.io.on('pong', (latency) => {
+                console.log('[WebSocket] Pong received, latency:', latency, 'ms');
+            });
+        }
+    }
+
+    emit(event, data) {
+        if (!this.socket?.connected) {
+            console.error('[WebSocket] Cannot emit - socket not connected');
+            return;
+        }
+
+        if (this.debugMode) {
+            console.log(`[WebSocket] Emitting: ${event}`, data);
+        }
+        
+        this.socket.emit(event, data);
+    }
+
+
+    getStatus() {
+        return this.socket?.connected ? 'connected' : 'disconnected';
+    }
+}
+
+export const socketService = new SocketService();
+
+
+
