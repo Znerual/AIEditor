@@ -55,7 +55,7 @@ class FlaskApp:
 
         gemini_api_key = "1234" # read from environment variables
 
-        self.socket_manager.init_socket_manager(socketio, gemini_api_key)
+        self.socket_manager.init_socket_manager(socketio, gemini_api_key, debug=Config.DEBUG)
 
         # setup routes
         self.setup_routes()
