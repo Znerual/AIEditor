@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import Confetti from 'react-confetti';
 
 export const AuthForm  = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false); // State to toggle between login and register
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
@@ -19,8 +21,15 @@ export const AuthForm  = () => {
             if (response && response.message !== 'User registered successfully') {
                 throw new Error(response.message || 'Registration failed');
             }
-            // After registering and login redirect to application
-            navigate('/');
+            // Play success animation
+            setSuccess(true);
+
+            // Switch to login after animation
+            setTimeout(() => {
+                setIsRegistering(false);
+                setSuccess(false);
+                navigate('/');
+            }, 8000);
 
         } else {
             await login(email, password);
@@ -35,6 +44,8 @@ export const AuthForm  = () => {
 return (
     <div className="login-container">
         <form onSubmit={handleSubmit} className="login-form">
+            {success && <Confetti />} {/* Display confetti when success is true */}
+            {success && <div className="success-message">Registration Successful!</div>}
             {error && <div className="error-message">{error}</div>}
             <div className="form-group">
                 <label htmlFor="email">Email</label>
