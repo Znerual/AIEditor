@@ -6,12 +6,14 @@ from events import WebSocketEvent
 from document_manager import DocumentManager
 from auth import Auth
 from autocomplete_manager import AutocompleteManager
-import asyncio
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from models import Document, db
 from sqlalchemy.exc import IntegrityError
+from delta import Delta
 import uuid
+from utils import delta_to_string
+import threading
 
 class SocketManager:
     _instance: Optional['SocketManager'] = None
@@ -24,26 +26,11 @@ class SocketManager:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def init_socket_manager(self, socketio, gemini_api_key):
+    def init_socket_manager(self, socketio, gemini_api_key, debug=False):
         self._socketio = socketio
-        self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key)
+        self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key, debug=debug)
         self._executor = ThreadPoolExecutor(max_workers=5)
         self._setup_handlers()
-
-    async def _get_autocompletion_suggestions(self, content: str, cursor_position: int):
-        """
-        Wrapper method to run autocompletion in thread pool
-        """
-        try:
-            loop = asyncio.get_event_loop()
-            suggestions = await loop.run_in_executor(
-                self._executor,
-                partial(self._autocomplete_manager.get_suggestions, content, cursor_position)
-            )
-            return suggestions
-        except Exception as e:
-            print(f"Error getting autocompletion suggestions: {str(e)}")
-            return []
 
 
     def _setup_handlers(self):
@@ -82,6 +69,7 @@ class SocketManager:
 
                 # Create a new document for the user
                 new_document = Document(id=document_id, user_id=user_id)
+                new_document.apply_delta(Delta([{'insert' : 'Hallo das ist ein Testdokument'}]))
                 db.session.add(new_document)
                 db.session.commit()
 
@@ -119,7 +107,7 @@ class SocketManager:
                     print(data)
                     raise ValueError("Missing documentId field in handle_get_document")
                 
-                content = DocumentManager.get_document_content(document_id, user_id).insert("Debug Test Document")
+                content = DocumentManager.get_document_content(document_id, user_id)
                 self._socketio.emit('server_sent_document_content', {
                     'documentId': document_id,
                     'content': content.ops
@@ -131,7 +119,7 @@ class SocketManager:
         
         @self._socketio.on('client_text_change')
         @Auth.socket_auth_required
-        async def handle_client_text_change(user_id, data):
+        def handle_client_text_change(user_id, data):
             try:
                 document_id = data.get('documentId')
                 delta = data.get('delta')
@@ -140,28 +128,31 @@ class SocketManager:
                 if not all([document_id, delta]):
                     raise ValueError("Missing required fields documentId or delta in handle_text_change")
                 
+
                 # User ID comes from the token, not the request
                 updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
-                
+                content_str = delta_to_string(updated_content)
+
                 # Broadcast the delta to all other clients in the same document room (except the sender)
-                self.emit_event('client_text_change', data, room=document_id, include_self=False)
+                self.emit_event(WebSocketEvent('client_text_change', data), room=document_id, include_self=False)
 
                  # Get and emit autocompletion suggestions
-                suggestions = await self._get_autocompletion_suggestions(
-                    updated_content,
+                suggestions = self._autocomplete_manager.get_suggestions(
+                    content_str,
                     cursor_position
                 )
+
                 
                 if suggestions:
-                    self._socketio.emit('server_autocompletion_suggestions', {
+                    self.emit_event(WebSocketEvent('server_autocompletion_suggestions', {
                         'documentId': document_id,
                         'suggestions': suggestions,
                         'cursorPosition': cursor_position
-                    })
+                    }))
                 
             except Exception as e:
                 print(f"Error handling text change: {str(e)}")
-                self.emit_event('error', {'message': str(e)})
+                self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
         
         
         
