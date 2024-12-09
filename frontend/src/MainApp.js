@@ -62,26 +62,27 @@ export const MainApp = () => {
       }, [chatMessages]);
 
     const handleDocumentCreated = useCallback((event) => {
-        console.log("Received document id ",event.document_id);
-        setDocumentId(event.document_id);
-        emit('get_document', {documentId});
-    }, [setDocumentId, documentId]);
+        console.log("Received document id ",event.documentId);
+        setDocumentId(event.documentId);
+        emit('client_get_document', { documentId: event.documentId });
+    }, [setDocumentId]);
 
     const handleGetContent = useCallback((event) => {
         console.log("Received document", event); // event has document_id and content fields
         if (event && event.content) {
             setEditorContent(event.content);
-            setDocumentId(event.document_id);
+            setDocumentId(event.documentId);
         }
     }, [setDocumentId, setEditorContent]);
 
     const socketEvents = useMemo(() => ({
-        connect: () => console.log('connected'),
-        document_created: handleDocumentCreated,
-        document_content: handleGetContent,
+        server_connects: () => console.log('server connected'),
+        server_disconnects: () => console.log('server disconnected'),
+        server_document_created: handleDocumentCreated,
+        server_sent_document_content: handleGetContent,
         disconnect: () => console.log('disconnected'),
-        autocompletion: handleAutocompletion,
-        chat_answer: handleChatAnswer,
+        server_autocompletion_suggestions: handleAutocompletion,
+        server_chat_answer: handleChatAnswer,
         structure_parsed: handleStructureParsed,
         test: () => console.log("Test Event"),
     }), [handleDocumentCreated]); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
@@ -98,7 +99,7 @@ export const MainApp = () => {
         console.log('Editor change source: ', source)
         if (source === 'user') {
             const ops = delta.ops;
-            emit('text_change', { delta: ops, document_id: documentId, cursor_position: cursorPosition });
+            emit('client_text_change', { delta: ops, documentId: documentId, cursorPosition: cursorPosition });
         }
         setEditorContent(content);
 
@@ -115,7 +116,7 @@ export const MainApp = () => {
     const handleEditorSelectionChange = useCallback((range, source, editor) => {
         if (range && documentId) {
             setCursorPosition(range.index);
-            emit('cursor_position', { document_id: documentId, cursor_position: range.index });
+            // emit('client_cursorPosition', { documentId: documentId, cursorPosition: range.index });
         }
     }, [documentId]);
 
