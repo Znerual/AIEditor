@@ -1,6 +1,6 @@
 // src/App.js
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import ReactQuill from 'react-quill';
+import ReactQuill, { Quill } from 'react-quill';
 import { useWebSocket } from './hooks/useWebSocket';
 import { EditorToolbar } from './components/Editor/EditorToolbar';
 import { FileUpload } from './components/Sidebar/FileUpload';
@@ -14,6 +14,8 @@ import './styles/App.css';
 import './styles/components.css';
 import './styles/globals.css'; 
 
+// const Delta = Quill.import('delta');
+
 export const MainApp = () => {
     // State management
     const [uploadedStructureFile, setUploadedStructureFile] = useState();
@@ -23,7 +25,13 @@ export const MainApp = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [editorContent, setEditorContent] = useState('');
     const [documentId, setDocumentId] = useState('');
-    const [cursorPosition, setCursorPosition] = useState();
+    const [cursorPosition, setCursorPosition] = useState(null);
+    const [ignoreNextSuggestion, setIgnoreNextSuggestion] = useState(false);
+    const [suggestions, setSuggestions] = useState([]);
+    const [suggestionIndex, setSuggestionIndex] = useState(0);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [contentBeforeSuggestion, setContentBeforeSuggestion] = useState(null);
+    const [cursorPositionBeforeSuggestion, setCursorPositionBeforeSuggestion] = useState(null);
     const quillRef = useRef(null);
     const { user, logout } = useAuth();
 
@@ -48,16 +56,43 @@ export const MainApp = () => {
         setChatMessages(prev => [...prev, { text: answer, sender: 'server' }]);
     }, []);
 
-    // Handler functions
     const handleAutocompletion = useCallback((event) => {
         console.log("Show Autocompletion", event);
-        // Implementation for autocompletion
+        if (!event.cursorPosition || !event.suggestions || event.suggestions.length === 0) {
+            console.log("No suggestions or cursor position available. Hiding suggestions.");
+            setShowSuggestions(false);
+            setSuggestions([]);
+            setSuggestionIndex(0);
+            return;
+        }
+    
+        const quillEditor = quillRef.current.getEditor();
+        const range = quillEditor.getSelection();
+        if (!range) {
+            console.warn("No selection found. Aborting autocompletion.");
+            setShowSuggestions(false);
+            return;
+        }
+    
+        // Store the content and cursor position before applying the suggestion
+        setContentBeforeSuggestion(quillEditor.getContents());
+        setCursorPositionBeforeSuggestion(range.index);
+    
+        // Apply the first suggestion immediately
+        const suggestionText = event.suggestions[0];
+        const suggestionStyle = { color: '#888' };  // Define your style
+        quillEditor.insertText(range.index, suggestionText, suggestionStyle); // Insert with custom formats
+        quillEditor.setSelection(range.index, 0, 'silent');
+    
+        setSuggestions(event.suggestions);
+        setSuggestionIndex(0); // Reset to the first suggestion
+        setShowSuggestions(true);
     }, []);
 
     const handleChatSubmit = useCallback((message) => {
         if (message.trim()) {
           setChatMessages([...chatMessages, { text: message, sender: 'user' }]);
-          emit('chat', { text: message });
+          emit('client_chat', { text: message });
         }
       }, [chatMessages]);
 
@@ -75,6 +110,62 @@ export const MainApp = () => {
         }
     }, [setDocumentId, setEditorContent]);
 
+    const handleKeyDown = useCallback((event) => {
+        console.log("[KeyDown] Show suggestions ", showSuggestions);
+        if (showSuggestions) {
+            const quillEditor = quillRef.current.getEditor();
+            const range = quillEditor.getSelection();
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                const newIndex = (suggestionIndex + 1) % suggestions.length;
+                
+                // Revert to the content before the suggestion
+                quillEditor.setContents(contentBeforeSuggestion, 'silent');
+
+                // Insert the new suggestion
+                const suggestionText = suggestions[newIndex];
+                const suggestionStyle = { color: '#888' };  // Define your style
+                quillEditor.insertText(range.index, suggestionText, suggestionStyle); // Insert with custom formats
+                quillEditor.setSelection(range.index + suggestionText.length, 0, 'silent');
+                setSuggestionIndex(newIndex);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                const newIndex = (suggestionIndex - 1 + suggestions.length) % suggestions.length;
+                
+                // Revert to the content before the suggestion
+                quillEditor.setContents(contentBeforeSuggestion, 'user');
+
+                // Insert the new suggestion
+                const suggestionText = suggestions[newIndex];
+                const suggestionStyle = { color: '#888' };  // Define your style
+                quillEditor.insertText(range.index, suggestionText, suggestionStyle); // Insert with custom formats
+                quillEditor.setSelection(range.index + suggestionText.length, 0, 'silent');
+                setSuggestionIndex(newIndex);
+
+                setSuggestionIndex(newIndex);
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+              
+                quillEditor.formatText(range.index - suggestions[suggestionIndex].length, suggestions[suggestionIndex].length, {color : '#FFF'}, 'silent');
+
+                setShowSuggestions(false);
+                setContentBeforeSuggestion(null);
+                setCursorPositionBeforeSuggestion(null);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                // Revert to the content before the suggestion
+                quillEditor.setContents(contentBeforeSuggestion, 'user');
+                quillEditor.setSelection(cursorPositionBeforeSuggestion, 0, 'user');
+
+                setShowSuggestions(false);
+                setContentBeforeSuggestion(null); // Clear the stored content
+                setCursorPositionBeforeSuggestion(null);
+                setIgnoreNextSuggestion(true);
+            }
+        }
+    }, [showSuggestions, suggestions, suggestionIndex, contentBeforeSuggestion]);
+
     const socketEvents = useMemo(() => ({
         server_connects: () => console.log('server connected'),
         server_disconnects: () => console.log('server disconnected'),
@@ -87,6 +178,10 @@ export const MainApp = () => {
         test: () => console.log("Test Event"),
     }), [handleDocumentCreated]); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
 
+    useEffect(() => {
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleKeyDown]);
 
     const { emit, status, debugEvents: wsDebugEvents } = useWebSocket(socketEvents);
 
@@ -96,9 +191,23 @@ export const MainApp = () => {
     }, [wsDebugEvents]);
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
-        console.log('Editor change source: ', source)
+        console.log('Editor change source: ', source, 'delta', delta, 'showSuggestions', showSuggestions)
         if (source === 'user') {
+            if (ignoreNextSuggestion) {  // Check the flag
+                setIgnoreNextSuggestion(false); // Reset the flag
+                setEditorContent(content);
+                return; // Ignore this suggestion event
+            }
             const ops = delta.ops;
+            const range = editor.getSelection();
+            let index = range ? range.index : null;
+            if (showSuggestions && index != null) {
+                const quillEditor = quillRef.current.getEditor();
+                quillEditor.formatText(cursorPositionBeforeSuggestion, quillEditor.getLength() - cursorPositionBeforeSuggestion, {
+                    'suggestion': false, // Clear the custom format
+                    'suggestion-index': false,
+                }, 'silent');
+            }
             emit('client_text_change', { delta: ops, documentId: documentId, cursorPosition: cursorPosition });
         }
         setEditorContent(content);
@@ -111,29 +220,15 @@ export const MainApp = () => {
                 timestamp: new Date()
             }]);
         }
-    }, [documentId, cursorPosition]);
+    }, [documentId, cursorPosition, showSuggestions, contentBeforeSuggestion, cursorPositionBeforeSuggestion, ignoreNextSuggestion]);
 
     const handleEditorSelectionChange = useCallback((range, source, editor) => {
-        if (range && documentId) {
+        console.log("Selection changed", range);
+        if (range) {
             setCursorPosition(range.index);
-            // emit('client_cursorPosition', { documentId: documentId, cursorPosition: range.index });
         }
-    }, [documentId]);
+    }, []);
 
-    // Event handlers
-    // const handleEditorChange = useCallback((content, delta, source, editor) => {
-    //     const ops = delta.ops
-    //     emit('text_change', {delta: ops, document_id: documentId, cursorPosition} );
-    //     setEditorContent(content);
-    //     if (process.env.REACT_APP_DEBUG) {
-    //         setDebugEvents(prev => [...prev, { 
-    //             type: 'editor_change',
-    //             content,
-    //             delta,
-    //             timestamp: new Date()
-    //         }]);
-    //     }
-    // }, [emit, setEditorContent]);
 
     return (
         <div className="app-container">
