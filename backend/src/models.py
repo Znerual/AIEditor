@@ -25,7 +25,7 @@ class User(db.Model):
 class Document(db.Model):
     __tablename__ = 'documents'
     
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(36), primary_key=True, unique=True, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.JSON, nullable=False, default={})
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
