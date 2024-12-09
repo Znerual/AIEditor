@@ -9,6 +9,8 @@ from autocomplete_manager import AutocompleteManager
 import asyncio
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
+from models import Document, db
+from sqlalchemy.exc import IntegrityError
 import uuid
 
 class SocketManager:
@@ -46,17 +48,42 @@ class SocketManager:
 
     def _setup_handlers(self):
 
+        # client connects to server
         @self._socketio.on('connect')
         def handle_connect():
+            self.emit_event(WebSocketEvent("server_connects", {}))
             print("Client connected, before authentification")
 
-        @self._socketio.on('authentication')
+        # client disconnects from server
+        @self._socketio.on('disconnect')
+        def handle_disconnect():
+            try:
+                # Client is disconnecting, leave the document room
+                document_id = session.get('document_id')
+                if document_id:
+                    leave_room(document_id)
+                    print(f"Client left room {document_id}")  # Log leaving room for debug
+                print('Client disconnected') # Log disconnect for debug
+
+            except KeyError as e:
+                print(f"Error during disconnect: {e}")
+
+
+        @self._socketio.on('client_authenticates')
         @Auth.socket_auth_required
-        def handle_authentication(user_id, data): 
+        def handle_client_authenticates(user_id, data): 
             print("Client tries to authenticate")
             try:
-                # Generate a unique document ID
-                document_id = str(uuid.uuid4())
+                # Generate a unique document ID and ensure it doesn't already exist
+                while True:
+                    document_id = str(uuid.uuid4())
+                    if not Document.query.filter_by(id=document_id).first():
+                        break
+
+                # Create a new document for the user
+                new_document = Document(id=document_id, user_id=user_id)
+                db.session.add(new_document)
+                db.session.commit()
 
                 # Store the document ID in the session for this client
                 session['document_id'] = document_id
@@ -67,44 +94,57 @@ class SocketManager:
                 print(f'Client authenticated: user_id={user_id}, document_id={document_id}')
 
                 # Send the document ID to the newly connected client
-                self.emit_event(WebSocketEvent('document_created', {'document_id': document_id}))
+                self.emit_event(WebSocketEvent('server_document_created', {'documentId': document_id}))
 
                 return True # Return True to acknowledge successful authentication
+            
+            except IntegrityError as e:
+                db.session.rollback()
+                print("Database integrity error while creating document ", e)
+                self.emit_event(WebSocketEvent('authentication_failed', {'message': 'Database integrity error'}))
+                return False
 
             except Exception as e:
                 print(f"Authentication or room joining error: {e}")
                 self.emit_event(WebSocketEvent('authentication_failed', {'message': str(e)}))  # Emit an error event
                 return False # Return False to indicate authentication failure
            
-        
-        @self._socketio.on('disconnect')
-        def handle_disconnect():
-            try:
-                # Client is disconnecting, leave the document room
-                document_id = session.get('document_id')
-                if document_id:
-                    leave_room(document_id)
-                    print(f"Client left room {document_id}")  # Log leaving room for debug
-                print('Client disconnected') # Log disconnect for debug
-            except KeyError as e:
-                print(f"Error during disconnect: {e}")
-        
-        @self._socketio.on('text_change')
+        @self._socketio.on('client_get_document')
         @Auth.socket_auth_required
-        async def handle_text_change(user_id, data):
+        def handle_client_get_document(user_id, data):
             try:
-                document_id = data.get('document_id')
+                document_id = data.get('documentId')
+                
+                if not document_id:
+                    print(data)
+                    raise ValueError("Missing documentId field in handle_get_document")
+                
+                content = DocumentManager.get_document_content(document_id, user_id).insert("Debug Test Document")
+                self._socketio.emit('server_sent_document_content', {
+                    'documentId': document_id,
+                    'content': content.ops
+                })
+                
+            except Exception as e:
+                print(f"Error getting document: {str(e)}")
+                self._socketio.emit('error', {'message': str(e)})
+        
+        @self._socketio.on('client_text_change')
+        @Auth.socket_auth_required
+        async def handle_client_text_change(user_id, data):
+            try:
+                document_id = data.get('documentId')
                 delta = data.get('delta')
-                cursor_position = data.get('cursor_position', 0)
+                cursor_position = data.get('cursorPosition', 0)
                 
                 if not all([document_id, delta]):
-                    raise ValueError("Missing required fields document_id or delta in handle_text_change")
+                    raise ValueError("Missing required fields documentId or delta in handle_text_change")
                 
                 # User ID comes from the token, not the request
                 updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
                 
                 # Broadcast the delta to all other clients in the same document room (except the sender)
-                self.emit_event('text_change', data, room=document_id, include_self=False)
+                self.emit_event('client_text_change', data, room=document_id, include_self=False)
 
                  # Get and emit autocompletion suggestions
                 suggestions = await self._get_autocompletion_suggestions(
@@ -113,39 +153,21 @@ class SocketManager:
                 )
                 
                 if suggestions:
-                    self._socketio.emit('autocompletion_suggestions', {
-                        'document_id': document_id,
+                    self._socketio.emit('server_autocompletion_suggestions', {
+                        'documentId': document_id,
                         'suggestions': suggestions,
-                        'cursor_position': cursor_position
+                        'cursorPosition': cursor_position
                     })
                 
             except Exception as e:
                 print(f"Error handling text change: {str(e)}")
                 self.emit_event('error', {'message': str(e)})
         
-        @self._socketio.on('get_document')
-        @Auth.socket_auth_required
-        def handle_get_document(user_id, data):
-            try:
-                document_id = data.get('documentId')
-                
-                if not document_id:
-                    print(data)
-                    raise ValueError("Missing documentId field in handle_get_document")
-                
-                content = DocumentManager.get_document_content(document_id, user_id) + "Test Run"
-                self._socketio.emit('document_content', {
-                    'document_id': document_id,
-                    'content': content
-                })
-                
-            except Exception as e:
-                print(f"Error getting document: {str(e)}")
-                self._socketio.emit('error', {'message': str(e)})
         
-        @self._socketio.on('chat')
+        
+        @self._socketio.on('client_chat')
         def handle_chat_event(msg):
-            self._socketio.emit("chat_answer", f"Answer: {msg}")
+            self._socketio.emit("server_chat_answer", f"Answer: {msg}")
     
     def emit_event(self, event: WebSocketEvent, **kwargs):
         if self._socketio is None:
