@@ -56,6 +56,7 @@ Follow the steps below to set up Eddy on your local machine.
    ```bash
    npm install react-quill @radix-ui/react-collapsible lucide-react --save
    npm install react-router-dom --save
+   npm install react-confetti --save
    ```
 
 3. Set up TailwindCSS:
@@ -119,7 +120,7 @@ docker pull postgres
 docker run --name eddy_database -p 5432:5432 -e POSTGRES_PASSWORD=1234 -e PGDATA=D:\Code\Node.js\AIEditor\backend\db -d postgres
 ```
 
-In the next step, we will create the right database:
+In the next step, we will create the right database, run this in a separate terminal while the container is running:
 
 ```bash
 docker exec -it eddy_database psql -U postgres
