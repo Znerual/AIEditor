@@ -20,7 +20,6 @@ class FlaskApp:
     def __init__(self):
         self.app = Flask(__name__)
         self.app.config.from_object(Config)
-        self.app.config['SECRET_KEY'] = 'your-secret-key'  # Add a secret key
 
         # Initialize database
         db.init_app(self.app)
@@ -54,7 +53,9 @@ class FlaskApp:
             #path='socket.io'
         )
 
-        self.socket_manager.init_socket_manager(socketio)
+        gemini_api_key = "1234" # read from environment variables
+
+        self.socket_manager.init_socket_manager(socketio, gemini_api_key)
 
         # setup routes
         self.setup_routes()
@@ -75,6 +76,34 @@ class FlaskApp:
                 })
             
             return jsonify({'error': 'Invalid credentials'}), 401
+
+        @self.app.route('/api/register', methods=['POST'])
+        def register():
+            data = request.get_json()
+            email = data.get('email')
+            password = data.get('password')
+
+            print(f"Using trying to register with {data}")
+
+            if not email or not password:
+                return jsonify({'message': 'Email and password are required'}), 400
+            
+            existing_user = User.query.filter_by(email=email).first()
+            if existing_user:
+                return jsonify({'message': 'Email address already exists'}), 409  # 409 Conflict
+            
+            try:
+                new_user = User(email=email)
+                new_user.set_password(password)  # Hash the password
+                db.session.add(new_user)
+                db.session.commit()
+                return jsonify({'message': 'User registered successfully'}), 201
+            except Exception as e:
+                db.session.rollback()  # Rollback in case of error
+                print(f"Error during registration: {e}") # Log the error for debugging
+                return jsonify({'message': 'Registration failed'}), 500
+
+           
 
         @self.app.route('/health')
         def health_check():
