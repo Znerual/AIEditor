@@ -3,6 +3,7 @@ from models import db, Document
 from typing import Optional
 from delta import Delta
 import json
+from utils import delta_to_string, string_to_delta
 
 class DocumentManager:
     @staticmethod
@@ -28,8 +29,13 @@ class DocumentManager:
         return updated_content
     
     @staticmethod
-    def get_document_content(document_id: int, user_id: str) -> dict:
+    def get_document_content(document_id: int, user_id: str, as_string=False) -> dict:
         document = Document.query.filter_by(id=document_id, user_id=user_id).first()
         if not document:
             raise ValueError("Document not found")
-        return Delta(document.content)
+        
+        if as_string:
+            # Convert Delta to string
+            return delta_to_string(document.get_current_delta()) # You'll need to implement `to_plain_text()`
+        else:
+            return document.get_current_delta()
