@@ -9,6 +9,7 @@ import threading
 import logging
 import queue
 from models import db, User, Document
+from sqlalchemy import text
 from auth import Auth
 
 # Configure logging
@@ -126,10 +127,17 @@ class FlaskApp:
                 edit_access_users = [{'id': entry.id, 'user_id': entry.user_id, 'granted_at': entry.granted_at, 'user': {'id': entry.user.id, 'email': entry.user.email}} for entry in doc.edit_access_entries]
                 read_access_users = [{'id': entry.id, 'user_id': entry.user_id, 'granted_at': entry.granted_at, 'user': {'id': entry.user.id, 'email': entry.user.email}} for entry in doc.read_access_entries]
 
+                # Calculate size using pg_column_size
+                size_query = text("SELECT pg_column_size(content) FROM documents WHERE id = :doc_id")
+                size_result = db.session.execute(size_query, {'doc_id': doc.id}).fetchone()
+                size_in_bytes = size_result[0] if size_result else 0
+                size_in_kb = round(size_in_bytes / 1024.0, 2)
+
                 document_list.append({
                     'id': doc.id,
                     'user_id': doc.user_id,
                     'created_at': doc.created_at,
+                    'size_kb': size_in_kb,
                     'edit_access_entries': edit_access_users,
                     'read_access_entries': read_access_users
                 })

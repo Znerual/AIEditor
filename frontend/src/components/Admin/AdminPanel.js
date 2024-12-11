@@ -219,6 +219,7 @@ const DocumentManagement = () => {
                                 <th>ID</th>
                                 <th>User ID</th>
                                 <th>Created At</th>
+                                <th>Size (KB)</th>
                                 <th>Read Access</th>
                                 <th>Edit Access</th>
                                 <th>Actions</th>
@@ -234,6 +235,7 @@ const DocumentManagement = () => {
                                     </td>
                                     <td>{doc.user_id}</td>
                                     <td>{new Date(doc.created_at).toLocaleString()}</td>
+                                    <td>{doc.size_kb}</td>
                                     <td>
                                         <ul>
                                             {doc.read_access_entries.map(entry => (
