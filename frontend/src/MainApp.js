@@ -30,6 +30,7 @@ export const MainApp = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [cursorPositionBeforeSuggestion, setCursorPositionBeforeSuggestion] = useState(null);
     const [userTypedText, setUserTypedText] = useState('');
+    const lastRequestIdRef = useRef(null); // Use a ref to store the last request ID
     const quillRef = useRef(null);
     const { user, logout } = useAuth();
 
@@ -70,6 +71,11 @@ export const MainApp = () => {
     }, []);
 
     const handleAutocompletion = useCallback((event) => {
+        if (event.requestId !== lastRequestIdRef.current) {
+            console.log("Ignoring outdated suggestion response", lastRequestIdRef.current, event.requestId);
+            return; // Ignore outdated responses
+        }
+
         console.log("Show Autocompletion", event);
         if (!event.cursorPosition || !event.suggestions || event.suggestions.length === 0) {
             console.log("No suggestions or cursor position available. Hiding suggestions.");
@@ -274,13 +280,17 @@ export const MainApp = () => {
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
         if (source === 'user') {
-
+            
             const range = editor.getSelection();
             if (range) {
+                const localRequestId = Date.now(); // Generate unique request ID
+                lastRequestIdRef.current = localRequestId;
+                console.log("Set lastRequestId", localRequestId); 
                 emit('client_text_change', {
                     delta: delta.ops,
                     documentId: documentId,
-                    cursorPosition: range.index
+                    cursorPosition: range.index,
+                    requestId: localRequestId,
                 });
             }
         }

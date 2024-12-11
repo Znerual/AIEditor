@@ -124,7 +124,7 @@ class SocketManager:
                 document_id = data.get('documentId')
                 delta = data.get('delta')
                 cursor_position = data.get('cursorPosition', 0)
-                
+                request_id = data.get('requestId')
                 if not all([document_id, delta]):
                     raise ValueError("Missing required fields documentId or delta in handle_text_change")
                 
@@ -147,7 +147,8 @@ class SocketManager:
                     self.emit_event(WebSocketEvent('server_autocompletion_suggestions', {
                         'documentId': document_id,
                         'suggestions': suggestions,
-                        'cursorPosition': cursor_position
+                        'cursorPosition': cursor_position,
+                        'requestId': request_id
                     }))
                 
             except Exception as e:
