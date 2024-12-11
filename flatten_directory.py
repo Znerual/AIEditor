@@ -48,8 +48,8 @@ def flatten_directory(input_dir, output_file):
                             outfile.write("\n\n\n\n")
 
 if __name__ == "__main__":
-    input_directory = r"D:\Code\Node.js\AIEditor"  # Replace with your project's directory path
-    output_file_path = r"D:\Code\Node.js\AIEditor\flattened_project.txt"  # Output file name
+    input_directory = os.path.dirname(__file__)  # Replace with your project's directory path
+    output_file_path = os.path.join(os.path.dirname(__file__), "flattened_project.txt")  # Output file name
     
     flatten_directory(input_directory, output_file_path)
     print(f"Flattened project has been saved to {output_file_path}")
