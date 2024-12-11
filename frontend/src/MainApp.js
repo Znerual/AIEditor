@@ -25,41 +25,22 @@ export const MainApp = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [editorContent, setEditorContent] = useState('');
     const [documentId, setDocumentId] = useState('');
-    const [cursorPosition, setCursorPosition] = useState(null);
-    const [ignoreNextSuggestion, setIgnoreNextSuggestion] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
     const [suggestionIndex, setSuggestionIndex] = useState(0);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const [contentBeforeSuggestion, setContentBeforeSuggestion] = useState(null);
     const [cursorPositionBeforeSuggestion, setCursorPositionBeforeSuggestion] = useState(null);
     const [userTypedText, setUserTypedText] = useState('');
-    const [shiftPressed, setShiftPressed] = useState(false);
     const quillRef = useRef(null);
     const { user, logout } = useAuth();
 
-
-    // Add effect to track shift key state
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.key === 'Shift') {
-                setShiftPressed(true);
-            }
-        };
-        
-        const handleKeyUp = (e) => {
-            if (e.key === 'Shift') {
-                setShiftPressed(false);
-            }
-        };
-        
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, []);
+    const suggestionStyle = { 
+        color: '#888',
+        backgroundColor: '#f0f0f0',
+    };
+    const textStyle = {
+        color: 'black',
+        background: 'transparent'
+    };
 
     const handleAuthenticationFailed = useCallback((event) => {
         console.log("Authentication failed", event);
@@ -106,18 +87,13 @@ export const MainApp = () => {
             return;
         }
     
-        // Store the content and cursor position before applying the suggestion
-        setContentBeforeSuggestion(quillEditor.getContents());
+        // Store the cursor position before applying the suggestion
         setCursorPositionBeforeSuggestion(range.index);
         setUserTypedText('');  // Reset typed text when new suggestion appears
 
         // Show the first suggestion
         const suggestionText = event.suggestions[0];
-        const suggestionStyle = { 
-            color: '#888',
-            backgroundColor: '#f0f0f0',
-         };  // Define your style
-        quillEditor.insertText(range.index, suggestionText, suggestionStyle); // Insert with custom formats
+        quillEditor.insertText(range.index, suggestionText, suggestionStyle, 'silent'); // Insert with custom formats
         quillEditor.setSelection(range.index, 0, 'silent');
     
         setSuggestions(event.suggestions);
@@ -163,8 +139,6 @@ export const MainApp = () => {
         console.log("[KeyDown] Show suggestions ", showSuggestions);
        
         const quillEditor = quillRef.current.getEditor();
-        const range = quillEditor.getSelection();
-
         switch (event.key) {
             case 'ArrowDown':
             case 'ArrowUp': {
@@ -172,7 +146,7 @@ export const MainApp = () => {
                 
                 // Remove previous suggestion
                 if (cursorPositionBeforeSuggestion) {
-                    quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestions[suggestionIndex].length);
+                    quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestions[suggestionIndex].length + 1);
                 }
 
                 const newIndex = event.key === 'ArrowDown'
@@ -181,15 +155,11 @@ export const MainApp = () => {
                 
                 // Insert new suggestion
                 const newSuggestion = suggestions[newIndex];
-                const tempFormat = {
-                    color: '#888',
-                    backgroundColor: '#f0f0f0',
-                };
-
-                quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, tempFormat);
-                quillEditor.setSelection(cursorPositionBeforeSuggestion, 0);
+                quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, suggestionStyle, 'silent');
+                quillEditor.setSelection(cursorPositionBeforeSuggestion, 0, 'silent');
 
                 setSuggestionIndex(newIndex);
+                setUserTypedText('');
                 break;
             } case 'Enter':
             case 'Tab': {
@@ -199,20 +169,16 @@ export const MainApp = () => {
                 // Accept the current suggestion
                 const suggestion = suggestions[suggestionIndex];
                 // Remove the temporary formatting
-                quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestion.length);
+                quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestion.length + 1, 'silent');
                 
                 // Insert the final text with normal formatting
-                quillEditor.insertText(cursorPositionBeforeSuggestion, suggestion, {
-                    color: 'black',
-                    background: 'transparent'
-                });
+                quillEditor.insertText(cursorPositionBeforeSuggestion, suggestion, textStyle, 'silent');
 
                 // Move cursor to end of inserted text
-                quillEditor.setSelection(cursorPositionBeforeSuggestion + suggestion.length, 0);
+                quillEditor.setSelection(cursorPositionBeforeSuggestion + suggestion.length, 0, 'silent');
 
                 // Clean up suggestion state
                 setShowSuggestions(false);
-                setContentBeforeSuggestion(null);
                 setCursorPositionBeforeSuggestion(null);
                 setUserTypedText('');
                 break;
@@ -221,7 +187,7 @@ export const MainApp = () => {
                 break;
             } default: {
                  // Skip if it's a modifier key or non-character key
-                 if (event.key.length !== 1 && event.key !== 'Backspace') {
+                 if (event.key.length !== 1 && event.key !== 'Backspace' && event.key !== 'Escape') {
                     return;
                 }
 
@@ -230,6 +196,8 @@ export const MainApp = () => {
                 let newTypedText = userTypedText;
                 if (event.key === 'Backspace') {
                     newTypedText = userTypedText.slice(0, -1);
+                } else if (event.key === 'Escape') {
+                    newTypedText = '';
                 } else {
                     newTypedText = userTypedText + event.key;
                 }
@@ -237,49 +205,39 @@ export const MainApp = () => {
 
                 // Check if typed text matches the start of the current suggestion
                 const currentSuggestion = suggestions[suggestionIndex];
-                if (currentSuggestion.startsWith(newTypedText)) {
+                if (matchesSuggestion(newTypedText, currentSuggestion) && event.key !== 'Escape') {
                     // Update the display with partially accepted suggestion
                     if (cursorPositionBeforeSuggestion) {
-                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length);
+                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length + 1, 'silent');
                     }
                     
                     // Insert accepted part in black
-                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, {
-                        color: 'black',
-                        background: 'transparent'
-                    });
+                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, textStyle, 'silent');
 
                     // Insert remaining suggestion in gray
                     const remainingSuggestion = currentSuggestion.slice(newTypedText.length);
                     quillEditor.insertText(
                         cursorPositionBeforeSuggestion + newTypedText.length,
                         remainingSuggestion,
-                        {
-                            color: '#888',
-                            backgroundColor: '#f0f0f0'
-                        }
+                        suggestionStyle,
+                        'silent'
                     );
                     
-                    quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0);
+                    quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                     
     
                 } else {
                     // If there's a mismatch, remove the suggestion
                     if (cursorPositionBeforeSuggestion) {
-                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length);
+                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length + 1, 'silent');
                     }
                     
                     // Insert the typed text
-                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, {
-                        color: 'black',
-                        background: 'transparent'
-                    });
-                    
-                    quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0);
+                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, textStyle, 'silent');
+                    quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                     
                     // Clean up suggestion state
                     setShowSuggestions(false);
-                    setContentBeforeSuggestion(null);
                     setCursorPositionBeforeSuggestion(null);
                     setUserTypedText('');
                 }
@@ -315,13 +273,7 @@ export const MainApp = () => {
     }, [wsDebugEvents]);
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
-        console.log('Editor change source: ', source, 'delta', delta, 'showSuggestions', showSuggestions)
         if (source === 'user') {
-            if (ignoreNextSuggestion) {  // Check the flag
-                setIgnoreNextSuggestion(false); // Reset the flag
-                setEditorContent(content);
-                return; // Ignore this suggestion event
-            }
 
             const range = editor.getSelection();
             if (range) {
@@ -342,14 +294,8 @@ export const MainApp = () => {
                 timestamp: new Date()
             }]);
         }
-    }, [documentId, ignoreNextSuggestion, emit]);
+    }, [documentId, emit]);
 
-    const handleEditorSelectionChange = useCallback((range, source, editor) => {
-        console.log("Selection changed", range);
-        if (range) {
-            setCursorPosition(range.index);
-        }
-    }, []);
 
 
     return (
@@ -385,7 +331,7 @@ export const MainApp = () => {
                         ref={quillRef}
                         value={editorContent}
                         onChange={handleEditorChange}
-                        onChangeSelection={handleEditorSelectionChange}
+                        //onChangeSelection={handleEditorSelectionChange}
                         modules={{
                             toolbar: [
                                 [{ header: [1, 2, 3, false] }],
