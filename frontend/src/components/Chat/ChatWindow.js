@@ -4,6 +4,8 @@ import ReactQuill from 'react-quill';
 import { Button } from '../ui/button';
 import { Send } from 'lucide-react';
 
+import '../../styles/chatSection.css';
+
 export const ChatWindow = ({ messages, onSend }) => {
     const [input, setInput] = useState('');
 
