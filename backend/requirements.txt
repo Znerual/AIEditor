@@ -10,3 +10,4 @@ pyjwt
 psycopg2
 lxml
 cssutils
+pgvector
