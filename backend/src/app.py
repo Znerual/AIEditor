@@ -104,6 +104,14 @@ class FlaskApp:
                 db.session.rollback()  # Rollback in case of error
                 print(f"Error during registration: {e}") # Log the error for debugging
                 return jsonify({'message': 'Registration failed'}), 500
+            
+        # def setup_embeddings_routes(app):
+        # @self.app.route('/api/embeddings', methods=['POST'])
+        # def create_embedding_route():
+        #     data = request.get_json()
+        #     request_data = FileEmbeddingRequest(filepath=data['filepath'], content=data['content'])
+        #     store_file_embedding(request_data.filepath, request_data.content)
+        #     return jsonify({'message': 'Embedding stored successfully'}), 201
 
         # Admin routes
         @self.app.route('/api/admin', methods=['GET'])
