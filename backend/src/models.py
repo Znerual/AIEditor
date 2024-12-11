@@ -1,5 +1,6 @@
 # src/models.py
 from flask_sqlalchemy import SQLAlchemy
+from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 import json
@@ -137,3 +138,21 @@ class User(db.Model):
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+class FileEmbedding(db.Model):
+    __tablename__ = "file_embeddings"
+
+    id = db.Column(db.Integer, primary_key=True, index=True, unique=True)
+    document_id = db.Column(db.Integer, db.ForeignKey("documents.id"), nullable=True)  # Relation to Document
+    filepath = db.Column(db.String, unique=True, index=True)
+    content_hash = db.Column(db.String(256), unique=True)
+    sequence_ids = db.Column(db.ARRAY(db.Integer))
+
+class SequenceEmbedding(db.Model):
+    __tablename__ = "sequence_embeddings"
+
+    id = db.Column(db.Integer, primary_key=True, index=True, unique=True)
+    file_id = db.Column(db.Integer, db.ForeignKey("file_embeddings.id"))  # Relation to FileEmbedding
+    sequence_hash = db.Column(db.String(256), unique=True)
+    sequence_text = db.Column(db.Text)
+    embedding = db.Column(Vector(768))  # Store individual embeddings
