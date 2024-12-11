@@ -1,0 +1,126 @@
+/* frontend/src/components/Admin/adminPanel.css */
+
+.admin-panel {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f4f4f4;
+  }
+  
+  .admin-panel h1 {
+    text-align: center;
+    color: #333;
+  }
+  
+  .admin-panel nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+    text-align: center;
+  }
+  
+  .admin-panel nav ul li {
+    display: inline;
+    margin: 0 10px;
+  }
+  
+  .admin-panel nav ul li a {
+    text-decoration: none;
+    color: #007bff;
+    font-weight: bold;
+  }
+  
+  .admin-panel nav ul li a:hover {
+    color: #0056b3;
+  }
+  
+  .admin-panel table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  .admin-panel th,
+  .admin-panel td {
+    text-align: left;
+    padding: 8px;
+    border: 1px solid #ddd;
+  }
+  
+  .admin-panel th {
+    background-color: #f0f0f0;
+    color: #333;
+  }
+  
+  .admin-panel tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  
+  .admin-panel button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 5px 10px;
+    margin: 2px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .admin-panel button:hover {
+    background-color: #45a049;
+  }
+  
+  .admin-panel .selected-document {
+    margin-top: 30px;
+    background-color: white;
+    border: 1px solid #ddd;
+    padding: 10px;
+  }
+  
+  .admin-panel .selected-document h3 {
+    color: #333;
+    margin-bottom: 10px;
+  }
+  
+  .admin-panel .selected-document pre {
+    white-space: pre-wrap; /* Preserve line breaks and spacing */
+    font-family: 'Courier New', Courier, monospace;
+  }
+  
+  .admin-panel p {
+    margin: 10px 0;
+  }
+  
+  /* Style for loading and error messages */
+  .admin-panel .loading,
+  .admin-panel .error {
+    font-style: italic;
+    color: #777;
+  }
+  
+  .admin-panel .error {
+    color: #d9534f; /* Red color for errors */
+  }
+  
+  .admin-panel button.delete {
+    background-color: #dc3545; /* Red */
+  }
+  
+  .admin-panel button.delete:hover {
+    background-color: #c82333;
+  }
+  
+  .admin-panel button.make-admin {
+    background-color: #28a745; /* Green */
+  }
+  
+  .admin-panel button.make-admin:hover {
+    background-color: #218838;
+  }
+  
+  .admin-panel button.remove-admin {
+    background-color: #ffc107; /* Yellow */
+  }
+  
+  .admin-panel button.remove-admin:hover {
+    background-color: #e0a800;
+  }

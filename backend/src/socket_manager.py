@@ -121,20 +121,34 @@ class SocketManager:
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_text_change(user_id, data):
             try:
-                document_id = data.get('documentId')
                 delta = data.get('delta')
-                cursor_position = data.get('cursorPosition', 0)
-                request_id = data.get('requestId')
+                document_id = data.get('documentId')
                 if not all([document_id, delta]):
                     raise ValueError("Missing required fields documentId or delta in handle_text_change")
                 
 
                 # User ID comes from the token, not the request
                 updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
-                content_str = delta_to_string(updated_content)
-
+                
                 # Broadcast the delta to all other clients in the same document room (except the sender)
                 self.emit_event(WebSocketEvent('client_text_change', data), room=document_id, include_self=False)
+                
+            except Exception as e:
+                print(f"Error handling text change: {str(e)}")
+                self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
+        
+        @self._socketio.on('client_request_suggestions')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_request_suggestions(user_id, data):
+
+            try:
+                document_id = data.get('documentId')
+                cursor_position = data.get('cursorPosition', 0)
+                request_id = data.get('requestId')
+                if not all([document_id, request_id]):
+                    raise ValueError("Missing required fields documentId and requestId in handle_text_change")
+                
+                content_str = DocumentManager.get_document_content(document_id, user_id, as_string=True)
 
                  # Get and emit autocompletion suggestions
                 suggestions = self._autocomplete_manager.get_suggestions(
@@ -154,7 +168,6 @@ class SocketManager:
             except Exception as e:
                 print(f"Error handling text change: {str(e)}")
                 self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
-        
         
         
         @self._socketio.on('client_chat')

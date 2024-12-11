@@ -32,13 +32,13 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const register = useCallback(async (email, password) => {
+  const register = useCallback(async (email, password, isAdmin) => {
     try {
       
       const response = await fetch('http://localhost:5000/api/register', { // API endpoint for registration
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, isAdmin })
       });
       
       if (!response.ok) {

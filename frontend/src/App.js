@@ -4,17 +4,49 @@ import { AuthProvider } from './contexts/AuthContext';
 import { MainApp } from './MainApp';
 import { AuthForm } from './components/Login/AuthForm';
 import { useAuth } from './contexts/AuthContext';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Import routing 
+import { AdminPanel } from './components/Admin/AdminPanel';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; // Import routing 
+
+// A wrapper for <Route> that redirects to the login
+// screen if you're not yet authenticated.
+function PrivateRoute({ children, adminRequired = false }) {
+  const { token, user } = useAuth();
+
+  return token ? (
+    adminRequired ? (
+      user?.isAdmin ? (
+        children
+        ) : (
+        <Navigate to="/" replace />
+        )
+    ) : (
+      children
+    )
+  ) : (
+    <Navigate to="/login" replace />
+  );
+}
+
 
 const AppContent = () => {
-  const { token } = useAuth();
-
   return (
     <Routes>
       <Route path="/login" element={<AuthForm />} />
       <Route
+        path="/admin/*"
+        element={
+          <PrivateRoute adminRequired>
+            <AdminPanel />
+          </PrivateRoute>
+        }
+      />
+      <Route
         path="/"
-        element={token ? <MainApp /> : <AuthForm />} // Or a loading/splash component
+        element={
+          <PrivateRoute>
+            <MainApp />
+          </PrivateRoute>
+        }
       />
     </Routes>
   );

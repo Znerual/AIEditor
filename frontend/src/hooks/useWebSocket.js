@@ -53,11 +53,6 @@ export const useWebSocket = (events) => {
                 // Call original handler
                 handler(...args);
 
-                if (typeof handler === 'function') {  // Check if handler is a function
-                    console.log(`Attached listener for event: ${event}`);
-                } else {
-                    console.error(`Handler for event '${event}' is not a function:`, handler);
-                }
             };
             return acc;
         }, {});
@@ -65,7 +60,6 @@ export const useWebSocket = (events) => {
         // Setup event listeners
         Object.entries(wrappedHandlers).forEach(([event, handler]) => {
             socket.on(event, handler);
-            console.log(`[WebSocket] Registered listener for: ${event}`);
         });
 
         // Add a catch-all listener for debugging

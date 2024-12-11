@@ -1,14 +1,36 @@
 /* styles/components.css */
 /* Upload area styles */
+/* Upload area styles */
 .upload-section {
-    padding: 1rem;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .upload-card {
-    border: 2px dashed #e2e8f0;
-    transition: border-color 0.2s ease;
-  }
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.upload-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+.collapse-icon {
+  height: 1.2rem;
+  width: 1.2rem;
+  color: #718096;
+}
+
+.upload-card {
+  border: 2px dashed #e2e8f0;
+  transition: border-color 0.2s ease;
+}
+
+.hidden-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+}
   
   .upload-card:hover {
     border-color: #cbd5e0;
@@ -161,7 +183,7 @@
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   width: 100%;
-  max-width: 400px;
+  max-width: 410px;
 }
 
 .form-group {
@@ -223,4 +245,30 @@
   font-size: 1.5rem;
   text-align: center;
   margin-top: 1rem;
+}
+
+.menubar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* This ensures the menu and actions are on opposite ends */
+  width: 100%;
+  border-bottom: 1px solid #ccc; /* Example border, adjust as needed */
+  padding: 0.5rem; /* Adjust padding as needed */
+}
+
+.menubar-toggle {
+    display: flex;
+}
+
+.menubar-content {
+  display: flex;
+  flex-grow: 1; /* Allow the menubar to grow and take available space */
+  border: none;
+  padding: 0;
+}
+
+.menubar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Adjust the space between buttons */
 }

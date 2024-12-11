@@ -8,7 +8,7 @@ from cli import CLI
 import threading
 import logging
 import queue
-from models import db, User
+from models import db, User, Document
 from auth import Auth
 
 # Configure logging
@@ -66,13 +66,13 @@ class FlaskApp:
             data = request.get_json()
             email = data.get('email')
             password = data.get('password')
-            
             user = User.query.filter_by(email=email).first()
             if user and user.check_password(password):
-                token = Auth.generate_token(str(user.id))
+                print("User logged in: ", user.email, " isAdmin: ", user.is_admin)
+                token = Auth.generate_token(str(user.id), user.is_admin)
                 return jsonify({
                     'token': token,
-                    'user': {'id': user.id, 'email': user.email}
+                    'user': {'id': user.id, 'email': user.email, 'isAdmin': user.is_admin}
                 })
             
             return jsonify({'error': 'Invalid credentials'}), 401
@@ -82,6 +82,7 @@ class FlaskApp:
             data = request.get_json()
             email = data.get('email')
             password = data.get('password')
+            is_admin = data.get('isAdmin', False)
 
             print(f"Using trying to register with {data}")
 
@@ -93,7 +94,7 @@ class FlaskApp:
                 return jsonify({'message': 'Email address already exists'}), 409  # 409 Conflict
             
             try:
-                new_user = User(email=email)
+                new_user = User(email=email, is_admin=is_admin)
                 new_user.set_password(password)  # Hash the password
                 db.session.add(new_user)
                 db.session.commit()
@@ -103,7 +104,83 @@ class FlaskApp:
                 print(f"Error during registration: {e}") # Log the error for debugging
                 return jsonify({'message': 'Registration failed'}), 500
 
+        # Admin routes
+        @self.app.route('/api/admin', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def admin():
+            return jsonify({'message': 'Admin access granted'})
+
+        @self.app.route('/api/admin/users', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_users():
+            # Implementation to get users
+            users = User.query.all()
+            return jsonify([{'id': user.id, 'email': user.email, 'is_admin': user.is_admin, 'last_login_at': user.last_login_at} for user in users])
+
+        @self.app.route('/api/admin/documents', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_documents():
+            documents = Document.query.all()
+            document_list = []
+            for doc in documents:
+                edit_access_users = [{'id': entry.id, 'user_id': entry.user_id, 'granted_at': entry.granted_at, 'user': {'id': entry.user.id, 'email': entry.user.email}} for entry in doc.edit_access_entries]
+                read_access_users = [{'id': entry.id, 'user_id': entry.user_id, 'granted_at': entry.granted_at, 'user': {'id': entry.user.id, 'email': entry.user.email}} for entry in doc.read_access_entries]
+
+                document_list.append({
+                    'id': doc.id,
+                    'user_id': doc.user_id,
+                    'created_at': doc.created_at,
+                    'edit_access_entries': edit_access_users,
+                    'read_access_entries': read_access_users
+                })
+
+            return jsonify(document_list)
            
+        # DELETE a user
+        @self.app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+        @Auth.rest_admin_auth_required
+        def delete_user(user_id):
+            user = User.query.get_or_404(user_id)
+            documents_from_user = Document.query.filter_by(user_id=user_id).all()
+            for document in documents_from_user:
+                db.session.delete(document)
+            db.session.delete(user)
+            db.session.commit()
+            return jsonify({'message': 'User deleted'}), 200
+
+        # Make a user an admin
+        @self.app.route('/api/admin/users/<int:user_id>/make-admin', methods=['PATCH'])
+        @Auth.rest_admin_auth_required
+        def make_user_admin(user_id):
+            user = User.query.get_or_404(user_id)
+            user.is_admin = True
+            db.session.commit()
+            return jsonify({'message': 'User is now an admin'}), 200
+        
+        # Remove admin rights
+        @self.app.route('/api/admin/users/<int:user_id>/remove-admin', methods=['PATCH'])
+        @Auth.rest_admin_auth_required
+        def remove_user_admin(user_id):
+            user = User.query.get_or_404(user_id)
+            user.is_admin = False
+            db.session.commit()
+            return jsonify({'message': 'User is no longer an admin'}), 200
+
+        # DELETE a document
+        @self.app.route('/api/admin/documents/<string:document_id>', methods=['DELETE'])
+        @Auth.rest_admin_auth_required
+        def delete_document(document_id):
+            document = Document.query.get_or_404(document_id)
+            db.session.delete(document)
+            db.session.commit()
+            return jsonify({'message': 'Document deleted'}), 200
+        
+        # GET a document
+        @self.app.route('/api/admin/documents/<string:document_id>', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_document(document_id):
+            document = Document.query.get_or_404(document_id)
+            return jsonify({'id': document.id, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content})
 
         @self.app.route('/health')
         def health_check():

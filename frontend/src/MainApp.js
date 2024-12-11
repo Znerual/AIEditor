@@ -2,7 +2,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
 import { useWebSocket } from './hooks/useWebSocket';
-import { EditorToolbar } from './components/Editor/EditorToolbar';
+import { Headerbar } from './components/Headerbar/Headerbar';
 import { FileUpload } from './components/Sidebar/FileUpload';
 import { ChatWindow } from './components/Chat/ChatWindow';
 import { DebugPanel } from './components/Debug/DebugPanel';
@@ -286,13 +286,18 @@ export const MainApp = () => {
         if (source === 'user') {
             const range = editor.getSelection();
             if (range) {
+                const index = range.index;
+                emit('client_text_change', {
+                    delta: delta.ops,
+                    documentId: documentId,
+                });
+
                 // use execution guard to prevent multiple requests
                 // Update the latest pending request data
                 lastRequestIdRef.current = Date.now();
                 pendingRequestRef.current = {
-                    delta: delta.ops,
                     documentId,
-                    cursorPosition: range.index,
+                    cursorPosition: index,
                     requestId: lastRequestIdRef.current, // Generate a unique request ID
                 };
 
@@ -306,12 +311,11 @@ export const MainApp = () => {
                 debounceTimerRef.current = setTimeout(() => {
 
                     if (pendingRequestRef.current) {
-                        const { delta, documentId, cursorPosition, requestId } = pendingRequestRef.current;
+                        const { documentId, cursorPosition, requestId } = pendingRequestRef.current;
     
                         // Emit the latest pending request
                         console.log("Emitting latest request:", requestId);
-                        emit('client_text_change', {
-                            delta,
+                        emit('client_request_suggestions', {
                             documentId,
                             cursorPosition,
                             requestId,
@@ -339,7 +343,7 @@ export const MainApp = () => {
 
     return (
         <div className="app-container">
-            <EditorToolbar 
+            <Headerbar 
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
                 sidebarOpen={sidebarOpen}
             />
@@ -362,7 +366,6 @@ export const MainApp = () => {
                           messages={chatMessages}
                           onSend={handleChatSubmit}
                       />
-                      <button onClick={logout}>Logout</button>
                   </div>
                 </div>
                 <div className="editor-container">
