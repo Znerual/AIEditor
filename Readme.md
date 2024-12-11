@@ -59,17 +59,24 @@ python app.py
 ### Step 3: Setup the Database
 
 Make sure that docker is installed and then run:
-
 ```bash
-docker pull postgres
-docker run --name eddy_database -p 5432:5432 -e POSTGRES_PASSWORD=1234 -e PGDATA=/home/ruzickal/Code/Privat/AIEditor/backend/db -d postgres
+docker pull pgvector/pgvector:0.8.0-pg17
+docker run --name eddy_database -p 5432:5432 -e POSTGRES_PASSWORD=1234 -e PGDATA=/home/ruzickal/Code/Privat/AIEditor/backend/db -d pgvector/pgvector:0.8.0-pg17
 ```
+
+
+> Old Version:
+> ```bash
+> docker pull postgres
+> docker run --name eddy_database -p 5432:5432 -e POSTGRES_PASSWORD=1234 -e PGDATA=/> home/ruzickal/Code/Privat/AIEditor/backend/db -d postgres
+>```
 
 In the next step, we will create the right database, run this in a separate terminal while the container is running:
 
 ```bash
 docker exec -it eddy_database psql -U postgres
 create database eddy_db;
+CREATE EXTENSION vector;
 ```
 
 ## Setup from Scratch
