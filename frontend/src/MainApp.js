@@ -3,7 +3,8 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import ReactQuill, { Quill } from 'react-quill';
 import { useWebSocket } from './hooks/useWebSocket';
 import { Headerbar } from './components/Headerbar/Headerbar';
-import { FileUpload } from './components/Sidebar/FileUpload';
+import { StructurUpload } from './components/Sidebar/StructureUpload';
+import { ContentUpload } from './components/Sidebar/ContentUpload';
 import { ChatWindow } from './components/Chat/ChatWindow';
 import { DebugPanel } from './components/Debug/DebugPanel';
 import { useAuth } from './contexts/AuthContext';
@@ -18,7 +19,7 @@ import './styles/globals.css';
 
 export const MainApp = () => {
     // State management
-    const [uploadedStructureFile, setUploadedStructureFile] = useState();
+    const [uploadedStructureFile, setUploadedStructureFile] = useState(null);
     const [uploadedContentFiles, setUploadedContentFiles] = useState([]);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [debugEvents, setDebugEvents] = useState([]);
@@ -182,7 +183,7 @@ export const MainApp = () => {
                 quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestion.length + 1, 'silent');
                 
                 // Insert the final text with normal formatting
-                quillEditor.insertText(cursorPositionBeforeSuggestion, suggestion, textStyle, 'silent');
+                quillEditor.insertText(cursorPositionBeforeSuggestion, suggestion, 'silent');
 
                 // Move cursor to end of inserted text
                 quillEditor.setSelection(cursorPositionBeforeSuggestion + suggestion.length, 0, 'silent');
@@ -222,7 +223,7 @@ export const MainApp = () => {
                     }
                     
                     // Insert accepted part in black
-                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, textStyle, 'silent');
+                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
 
                     // Insert remaining suggestion in gray
                     const remainingSuggestion = currentSuggestion.slice(newTypedText.length);
@@ -243,7 +244,7 @@ export const MainApp = () => {
                     }
                     
                     // Insert the typed text
-                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, textStyle, 'silent');
+                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
                     quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                     
                     // Clean up suggestion state
@@ -350,23 +351,23 @@ export const MainApp = () => {
             
             <div className="main-content">
                 <div className={`sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-                  <div className="sidebar-content">
-                      <FileUpload 
-                          title="Structure Template" 
-                          onUpload={handleStructureUpload}
-                          uploadedFiles={uploadedStructureFile}
-                      />
-                      <FileUpload 
-                          title="Content Files" 
-                          onUpload={handleContentUpload}
-                          multiple 
-                          uploadedFiles={uploadedContentFiles}
-                      />
-                      <ChatWindow 
-                          messages={chatMessages}
-                          onSend={handleChatSubmit}
-                      />
-                  </div>
+                    <div className="sidebar-content">
+                        <StructurUpload
+                            title="Structure Template" 
+                            onUpload={handleStructureUpload}
+                            uploadedFile={uploadedStructureFile}
+                        />
+                        <ContentUpload
+                            key="content-upload"
+                            title="Content Files" 
+                            onUpload={handleContentUpload}
+                            uploadedFiles={uploadedContentFiles}
+                        />
+                        <ChatWindow 
+                            messages={chatMessages}
+                            onSend={handleChatSubmit}
+                        />
+                    </div>
                 </div>
                 <div className="editor-container">
                     <ReactQuill
