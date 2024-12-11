@@ -39,79 +39,24 @@ Follow the steps below to set up Eddy on your local machine.
 
 ### Step 1: Set Up Node.js
 
-1. Download and install **nvs** for Windows from [here](https://github.com/jasongin/nvs/releases).
-2. Add nvs to your system's PATH:
+1. Download and install **nvs** for Windows from [here](https://github.com/jasongin/nvs/releases), or for Linux follow the instructions from [here](https://github.com/jasongin/nvs).
+2. For Windows: Add nvs to your system's PATH:
    - Go to **System Environment Variables** -> **Path** -> Add: `%LOCALAPPDATA%\Local\nvs`
+3. Install **Node.js** using nvs:
+   - Open a terminal and run: `nvs` and then select node version 23.4 or newer.
+4. Install the required packages:
+   - Open a terminal and run: `npm install` in the `AIEditor/frontend` folder.
 
-### Step 2: Initialize the Frontend
-
-1. Create the React app in the `AIEditor` folder by running:
-
-   ```bash
-   npx create-react-app frontend
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   npm install react-quill @radix-ui/react-collapsible lucide-react --save
-   npm install react-router-dom --save
-   npm install react-confetti --save
-   ```
-
-3. Set up TailwindCSS:
-
-   ```bash
-   npm install -D tailwindcss
-   npx tailwindcss init
-   npm install tailwindcss-animate class-variance-authority clsx tailwind-merge lucide-react
-   npm install @radix-ui/react-icons
-   ```
-
-### Step 3: Configure TypeScript
-
-1. Update the `tsconfig.json` file as follows:
-
-   ```json
-   {
-       "compilerOptions": {
-           "baseUrl": ".",
-           "paths": {
-               "@/components": ["./src/components"],
-               "@/components/*": ["./src/components/*"],
-               "@/lib/*": ["./src/lib/*"],
-               "@/*": ["./src/*"]
-           }
-       },
-       "files": []
-   }
-   ```
-
-### Step 4: Install shadcn-ui Components
-
-1. Initialize shadcn-ui and add components:
-
-   ```bash
-   npx shadcn-ui@0.8.0 init
-   npx shadcn-ui@0.8.0 add button card menubar collapsible
-   ```
-
-2. Update aliases in the `components.json` file to:
-
-   ```json
-   "aliases": {
-       "components": "src/components",
-       "utils": "src/lib/utils"
-   }
-   ```
-
-3. Adjust imports in `.tsx` files (e.g., `button`) to use relative paths (`./...`) instead of `@/...`.
-
-### Step 5: Setup the Backend Environment
+### Step 2: Setup the Backend Environment
 
 Create a new virtual environment and install the packages from the requirements.txt
+Then, the backend server can be started by running the `app.py` script:
 
-### Step 6: Setup the Database
+```bash
+python app.py
+```
+
+### Step 3: Setup the Database
 
 Make sure that docker is installed and then run:
 
@@ -127,6 +72,74 @@ docker exec -it eddy_database psql -U postgres
 create database eddy_db;
 ```
 
+## Setup from Scratch
+NOTE!: This is not recommended and its only here for reference and keeping track of the initial setup.
+
+### Step 1: Initialize the Frontend
+1. Create the React app in the `AIEditor` folder by running:
+
+```bash
+npx create-react-app frontend
+```
+
+2. Install dependencies:
+
+```bash
+npm install react-quill @radix-ui/react-collapsible lucide-react --save
+npm install react-router-dom --save
+npm install react-confetti --save
+```
+
+3. Set up TailwindCSS:
+
+```bash
+npm install -D tailwindcss
+npx tailwindcss init
+npm install tailwindcss-animate class-variance-authority clsx tailwind-merge lucide-react
+npm install @radix-ui/react-icons
+```
+
+### Step 2: Configure TypeScript
+
+1. Update the `tsconfig.json` file as follows:
+
+```json
+{
+      "compilerOptions": {
+         "baseUrl": ".",
+         "paths": {
+            "@/components": ["./src/components"],
+            "@/components/*": ["./src/components/*"],
+            "@/lib/*": ["./src/lib/*"],
+            "@/*": ["./src/*"]
+         }
+      },
+      "files": []
+}
+```
+
+### Step 3: Install shadcn-ui Components
+
+1. Initialize shadcn-ui and add components:
+
+```bash
+npx shadcn-ui@0.8.0 init
+npx shadcn-ui@0.8.0 add button card menubar collapsible
+```
+
+2. Update aliases in the `components.json` file to:
+
+```json
+"aliases": {
+      "components": "src/components",
+      "utils": "src/lib/utils"
+}
+```
+
+3. Adjust imports in `.tsx` files (e.g., `button`) to use relative paths (`./...`) instead of `@/...`.
+
+
+
 ---
 
 ## Usage
@@ -136,31 +149,30 @@ create database eddy_db;
 1. Activate the virtual environment.
 2. Run the backend using the `app.py` script:
 
-   ```bash
-   python app.py
-   ```
+```bash
+python app.py
+```
 
 ### Frontend
 
+1. Select the appropriate Node.js version using nvs:
+
+```bash
+nvs
+```
+
+
 1. Switch to the `frontend` directory:
 
-   ```bash
-   cd frontend
-   ```
+```bash
+cd frontend
+```
 
 2. Start the frontend:
 
-   ```bash
-   npm start
-   ```
-
-### Node.js
-
-1. Select the appropriate Node.js version using nvs:
-
-   ```bash
-   nvs
-   ```
+```bash
+npm start
+```
 
 ---
 
