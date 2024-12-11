@@ -148,6 +148,10 @@ class FileEmbedding(db.Model):
     content_hash = db.Column(db.String(256), unique=True)
     sequence_ids = db.Column(db.ARRAY(db.Integer))
 
+    # Relationship to SequenceEmbedding
+    sequences = db.relationship("SequenceEmbedding", back_populates="file", cascade="all, delete-orphan")
+
+
 class SequenceEmbedding(db.Model):
     __tablename__ = "sequence_embeddings"
 
@@ -156,3 +160,6 @@ class SequenceEmbedding(db.Model):
     sequence_hash = db.Column(db.String(256), unique=True)
     sequence_text = db.Column(db.Text)
     embedding = db.Column(Vector(768))  # Store individual embeddings
+
+    # Relationship to FileEmbedding
+    file = db.relationship("FileEmbedding", back_populates="sequences")
