@@ -176,6 +176,20 @@ npm start
 
 ---
 
+## Notes
+
+### Development Hacks
+
+#### Drop the Database
+
+Drop and then recreate the database.
+
+CAUTION! This of course deletes all the data! Only use in development.
+```bash
+drop database eddy_db;
+create database eddy_db;
+```
+
 ## Contribution
 
 We welcome contributions to Eddy! If you'd like to report an issue, suggest a feature, or contribute code, feel free to submit a pull request or open an issue in the repository.
