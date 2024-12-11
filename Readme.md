@@ -62,7 +62,7 @@ Make sure that docker is installed and then run:
 
 ```bash
 docker pull postgres
-docker run --name eddy_database -p 5432:5432 -e POSTGRES_PASSWORD=1234 -e PGDATA=D:\Code\Node.js\AIEditor\backend\db -d postgres
+docker run --name eddy_database -p 5432:5432 -e POSTGRES_PASSWORD=1234 -e PGDATA=/home/ruzickal/Code/Privat/AIEditor/backend/db -d postgres
 ```
 
 In the next step, we will create the right database, run this in a separate terminal while the container is running:
