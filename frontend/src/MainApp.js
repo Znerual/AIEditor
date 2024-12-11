@@ -30,7 +30,9 @@ export const MainApp = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [cursorPositionBeforeSuggestion, setCursorPositionBeforeSuggestion] = useState(null);
     const [userTypedText, setUserTypedText] = useState('');
-    const lastRequestIdRef = useRef(null); // Use a ref to store the last request ID
+    const lastRequestIdRef = useRef(null); // Use a ref to allow for latest updates without rerendering
+    const debounceTimerRef = useRef(null);
+    const pendingRequestRef = useRef(null);
     const quillRef = useRef(null);
     const { user, logout } = useAuth();
 
@@ -42,6 +44,8 @@ export const MainApp = () => {
         color: 'black',
         background: 'transparent'
     };
+
+    const DEBOUNCE_WAITING_TIME = 100; // Time in milliseconds to wait before sending a request
 
     const handleAuthenticationFailed = useCallback((event) => {
         console.log("Authentication failed", event);
@@ -280,18 +284,43 @@ export const MainApp = () => {
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
         if (source === 'user') {
-            
             const range = editor.getSelection();
             if (range) {
-                const localRequestId = Date.now(); // Generate unique request ID
-                lastRequestIdRef.current = localRequestId;
-                console.log("Set lastRequestId", localRequestId); 
-                emit('client_text_change', {
+                // use execution guard to prevent multiple requests
+                // Update the latest pending request data
+                lastRequestIdRef.current = Date.now();
+                pendingRequestRef.current = {
                     delta: delta.ops,
-                    documentId: documentId,
+                    documentId,
                     cursorPosition: range.index,
-                    requestId: localRequestId,
-                });
+                    requestId: lastRequestIdRef.current, // Generate a unique request ID
+                };
+
+                // Clear the previous timer
+                if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current);
+                }
+
+
+                // Set up a new debounce timer
+                debounceTimerRef.current = setTimeout(() => {
+
+                    if (pendingRequestRef.current) {
+                        const { delta, documentId, cursorPosition, requestId } = pendingRequestRef.current;
+    
+                        // Emit the latest pending request
+                        console.log("Emitting latest request:", requestId);
+                        emit('client_text_change', {
+                            delta,
+                            documentId,
+                            cursorPosition,
+                            requestId,
+                        });
+    
+                        // Clear the pending request data after emitting
+                        pendingRequestRef.current = null;
+                    }
+                }, DEBOUNCE_WAITING_TIME);
             }
         }
         setEditorContent(content);
