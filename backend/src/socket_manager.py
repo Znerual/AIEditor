@@ -57,7 +57,7 @@ class SocketManager:
 
 
         @self._socketio.on('client_authenticates')
-        @Auth.socket_auth_required
+        @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_authenticates(user_id, data): 
             print("Client tries to authenticate")
             try:
@@ -98,7 +98,7 @@ class SocketManager:
                 return False # Return False to indicate authentication failure
            
         @self._socketio.on('client_get_document')
-        @Auth.socket_auth_required
+        @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_get_document(user_id, data):
             try:
                 document_id = data.get('documentId')
@@ -118,7 +118,7 @@ class SocketManager:
                 self._socketio.emit('error', {'message': str(e)})
         
         @self._socketio.on('client_text_change')
-        @Auth.socket_auth_required
+        @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_text_change(user_id, data):
             try:
                 document_id = data.get('documentId')

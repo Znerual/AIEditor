@@ -37,6 +37,7 @@ export const MainApp = () => {
     const quillRef = useRef(null);
     const { user, logout } = useAuth();
 
+
     // Add effect to track shift key state
     useEffect(() => {
         const handleKeyDown = (e) => {
@@ -58,6 +59,11 @@ export const MainApp = () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
+    }, []);
+
+    const handleAuthenticationFailed = useCallback((event) => {
+        console.log("Authentication failed", event);
+        logout();
     }, []);
 
 
@@ -286,6 +292,7 @@ export const MainApp = () => {
     const socketEvents = useMemo(() => ({
         server_connects: () => console.log('server connected'),
         server_disconnects: () => console.log('server disconnected'),
+        server_authentication_failed: handleAuthenticationFailed,
         server_document_created: handleDocumentCreated,
         server_sent_document_content: handleGetContent,
         disconnect: () => console.log('disconnected'),

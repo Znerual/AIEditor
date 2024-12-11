@@ -10,23 +10,24 @@ const AppContent = () => {
   const { token } = useAuth();
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={<AuthForm />} />
-        <Route
-          path="/"
-          element={token ? <MainApp /> : <AuthForm />} // Or a loading/splash component
-        />
-      </Routes>
-    </Router>
+    <Routes>
+      <Route path="/login" element={<AuthForm />} />
+      <Route
+        path="/"
+        element={token ? <MainApp /> : <AuthForm />} // Or a loading/splash component
+      />
+    </Routes>
   );
 };
 
 const App = () => {
+
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </Router>
   );
 };
 
