@@ -79,6 +79,7 @@ class Document(db.Model):
     __tablename__ = 'documents'
     
     id = db.Column(db.String(36), primary_key=True, unique=True, nullable=False)
+    title = db.Column(db.String(255), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.JSON, nullable=False, default={})
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
@@ -143,8 +144,9 @@ class FileEmbedding(db.Model):
     __tablename__ = "file_embeddings"
 
     id = db.Column(db.Integer, primary_key=True, index=True, unique=True)
-    document_id = db.Column(db.Integer, db.ForeignKey("documents.id"), nullable=True)  # Relation to Document
+    document_id = db.Column(db.String(36), db.ForeignKey("documents.id"), nullable=True)  # Relation to Document
     filepath = db.Column(db.String, unique=True, index=True)
+    non_text_content = db.Column(db.LargeBinary, nullable=True)
     content_hash = db.Column(db.String(256), unique=True)
     sequence_ids = db.Column(db.ARRAY(db.Integer))
 
