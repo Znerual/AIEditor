@@ -1,4 +1,3 @@
-import { useAuth } from './contexts/AuthContext';
 
 export class WebsiteParser {
     // List of tags to exclude from text extraction
