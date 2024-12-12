@@ -8,14 +8,19 @@ export class documentParser {
 
     static async readDocument(document) {
         let composedDelta = new Delta();
+        let content = document.content;
         const title = document.title;
         
-        if (!document.content || !Array.isArray(document.content)) {
-            throw new Error('Invalid document content format');
+        if (!document.content)  {
+            throw new Error('Document empty');
+        }
+
+        if (!Array.isArray(content)) {
+            content = [content];
         }
 
         // Process each operation in the delta, composing them into a single delta
-        document.content.forEach(op => {
+        content.forEach(op => {
             composedDelta = composedDelta.compose(new Delta([op]));
         });
 
