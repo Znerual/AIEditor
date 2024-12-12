@@ -16,6 +16,8 @@ export const AuthForm  = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSuccess(false);
     try {
         if (isRegistering) {
             const response = await register(email, password, isAdmin);
