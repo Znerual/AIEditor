@@ -76,6 +76,7 @@ In the next step, we will create the right database, run this in a separate term
 ```bash
 docker exec -it eddy_database psql -U postgres
 create database eddy_db;
+\c eddy_db;
 CREATE EXTENSION vector;
 ```
 
@@ -95,6 +96,8 @@ npx create-react-app frontend
 npm install react-quill @radix-ui/react-collapsible lucide-react --save
 npm install react-router-dom --save
 npm install react-confetti --save
+npm install pdfjs-dist --save
+npm mammoth jsdom docx2html --save
 ```
 
 3. Set up TailwindCSS:
@@ -193,8 +196,12 @@ Drop and then recreate the database.
 
 CAUTION! This of course deletes all the data! Only use in development.
 ```bash
+docker exec -it eddy_database psql -U postgres
+\c postgres;
 drop database eddy_db;
 create database eddy_db;
+\c eddy_db;
+CREATE EXTENSION vector;
 ```
 
 ## Contribution
