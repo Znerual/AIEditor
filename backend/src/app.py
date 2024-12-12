@@ -5,6 +5,7 @@ from flask_socketio import SocketIO
 from config import Config
 from socket_manager import SocketManager
 from cli import CLI
+import requests
 import threading
 import logging
 import queue
@@ -134,6 +135,23 @@ class FlaskApp:
             
             return jsonify([{'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
 
+        @self.app.route('/api/fetch-website', methods=['GET'])
+        def fetch_website():
+            url = request.args.get('url')
+            if not url:
+                return jsonify({'error': 'Missing URL parameter'}), 400
+
+            print("Fetching website", url)
+            try:
+                response = requests.get(url)
+                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+                # You might want to adjust the headers depending on what you're sending back
+                return response.content, response.status_code, {'Content-Type': response.headers['Content-Type']}
+
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching website: {e}")
+                return jsonify({'error': 'Failed to fetch website', 'message': str(e)}), 500
         # def setup_embeddings_routes(app):
         # @self.app.route('/api/embeddings', methods=['POST'])
         # def create_embedding_route():

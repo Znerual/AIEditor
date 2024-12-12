@@ -1,6 +1,6 @@
+import { useAuth } from './contexts/AuthContext';
 
 export class WebsiteParser {
-
     // List of tags to exclude from text extraction
     static excludedTags = new Set([
         'script',
@@ -44,7 +44,7 @@ export class WebsiteParser {
             onProgress?.({ stage: 'fetching', progress: 0 });
 
             // Fetch the HTML content of the webpage
-            const response = await fetch(url);
+            const response = await fetch(`http://localhost:5000/api/fetch-website?url=${encodeURIComponent(url)}`);
             const htmlText = await response.text();
 
             // Notify that the page content is loaded
