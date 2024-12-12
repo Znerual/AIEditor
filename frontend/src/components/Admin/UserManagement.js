@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const UserManagement = () => {
     const [users, setUsers] = useState([]);
