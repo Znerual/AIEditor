@@ -105,6 +105,18 @@ class FlaskApp:
                 print(f"Error during registration: {e}") # Log the error for debugging
                 return jsonify({'message': 'Registration failed'}), 500
             
+        
+        @self.app.route('/api/authenticate_token', methods=['GET'])
+        @Auth.rest_auth_required
+        def authenticate_token(user_id):
+            existing_user = User.query.filter_by(id=user_id).first()
+            if not existing_user:
+                return jsonify({'message': 'User not found'}), 404
+            
+            return jsonify({    
+                'user': {'id': existing_user.id, 'email': existing_user.email, 'isAdmin': existing_user.is_admin}
+            })
+
         # def setup_embeddings_routes(app):
         # @self.app.route('/api/embeddings', methods=['POST'])
         # def create_embedding_route():
