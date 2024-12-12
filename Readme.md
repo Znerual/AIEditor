@@ -97,7 +97,7 @@ npm install react-quill @radix-ui/react-collapsible lucide-react --save
 npm install react-router-dom --save
 npm install react-confetti --save
 npm install pdfjs-dist --save
-npm mammoth jsdom docx2html --save
+npm mammoth --save
 ```
 
 3. Set up TailwindCSS:
