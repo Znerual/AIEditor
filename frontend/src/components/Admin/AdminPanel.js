@@ -2,6 +2,8 @@
 import React, { useCallback } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { UserManagement } from './UserManagement';
+import { DocumentManagement } from './DocumentManagement';
 
 import '../../styles/adminPanel.css';
 
