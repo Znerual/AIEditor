@@ -17,7 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AddWebsiteModal } from './AddWebsiteModel';
 import { SelectDocumentModal } from './SelectDocumentModal';
 import { PdfParser } from '../../utils/pdfUtils';
-import { DocxParser, DocParser } from '../../utils/wordUtils';
+import { DocxParser } from '../../utils/wordUtils';
 import { WebsiteParser } from '../../utils/websiteUtils';
 import { documentParser } from '../../utils/documentUtils';
 import '../../styles/uploadSections.css';
@@ -35,12 +35,17 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         setIsCollapsed(!isCollapsed);
     };
 
-    // Update uploadedFiles whenever fileSelections changes
     useEffect(() => {
-        // If you want to update uploadedFiles based on fileSelections:
-        const updatedFiles = Object.values(fileSelections); // Get all selected files from the fileSelections
-        onUpload(updatedFiles); // Pass updated files to onUpload if needed
-    }, [fileSelections, onUpload]); // Effect runs when fileSelections changes
+      // Filter fileSelections to only include selected files (where value is true)
+      const selectedFileNames = Object.entries(fileSelections)
+          .filter(([key, value]) => value)
+          .map(([key]) => key);
+
+      // Filter selectedFiles to only include files that are selected
+      const updatedFiles = selectedFiles.filter(file => selectedFileNames.includes(file.name));
+      
+      uploadedFiles = updatedFiles; // Pass only the selected files to onUpload 
+    }, [selectedFiles, fileSelections, onUpload]);
 
 
     const extract_text_from_image = async (file) => {
@@ -53,76 +58,10 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       });
     };
 
-    const handleContentUpload = useCallback(async (event) => {
-      const files = event.target.files;
-      console.log("Handling content upload", files);
-      if (!files) return;
-      
-      const extractedContent = [];
 
-      for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const fileExtension = file.name.split('.').pop().toLowerCase();
-
-          if (fileExtension === 'pdf') {
-              // Extract text from PDF
-              try {
-                  const text = await PdfParser.readPdf(file);
-                  extractedContent.push({ file, text });
-              } catch (error) {
-                  console.error("Error extracting text from PDF", file.name, error);
-              }
-          } else if (['txt', 'md'].includes(fileExtension)) { 
-              // Extract text from text file
-              try {
-                  let fr = new FileReader();
-                  fr.onload = function() {
-                      const text = fr.result;
-                      extractedContent.push({ file, text });
-                  };
-                  fr.readAsText(file);
-              } catch (error) {
-                  console.error("Error extracting text from text file", file.name, error);
-              }
-          } else if (fileExtension === 'docx') {
-              // Extract text from PDF, DOC, DOCX
-              try {
-                  const text = await DocxParser.readDocx(file);
-                  extractedContent.push({ file, text });
-              } catch (error) {
-                  console.error("Error extracting text from Docx", file.name, error);
-              }
-          } else if (fileExtension === 'doc') {
-              // Extract text from PDF, DOC, DOCX
-              try {
-                  const text = await DocParser.readDoc(file);
-                  extractedContent.push({ file, text });
-              } catch (error) {
-                  console.error("Error extracting text from Doc", file.name, error);
-              }
-          } else {
-              // Assume it's an image and extract text from image
-              try {
-                  const text = await extract_text_from_image(file);
-                  extractedContent.push({ file, text });
-              } catch (error) {
-                  console.error("Error extracting text from image", file.name, error);
-              }
-          }
-      }
-
-      // Update state with extracted content
-      onUpload(extractedContent);
-
-      // You can now do something with the extractedContent, like sending it to a server or storing it
-      console.log("Extracted content:", extractedContent);
-
-  }, []);
-
-
-    const handleFilesChange = useCallback((filesOrEvent) => {
+    const handleFilesChange = useCallback(async (filesOrEvent) => {
         let newFiles;
-
+        console.log("handleFilesChange filesOrEvent", filesOrEvent);
         // Check if it's an event from an input element or a direct array of files
         if (filesOrEvent.target && filesOrEvent.target.files) {
             newFiles = Array.from(filesOrEvent.target.files);
@@ -131,6 +70,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         }
 
         setSelectedFiles((prevFiles) => {
+            console.log("Set Selected Files ", prevFiles, " new Files ",newFiles);
             const currentFiles = Array.isArray(prevFiles) ? prevFiles : [];
             return [...currentFiles, ...newFiles];
         });
@@ -146,8 +86,69 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         
         // If it was an event, we pass it through, otherwise, we create a fake one
         const eventToPass = filesOrEvent.target ? filesOrEvent : { target: { files: newFiles } };
-        handleContentUpload(eventToPass);
-    }, [handleContentUpload]);
+        console.log("handleFileChange eventToPass", eventToPass);
+        const files = eventToPass.target.files;
+        console.log("Handling content upload", files);
+        if (!files) return;
+        
+        const extractedContent = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+
+            if (fileExtension === 'pdf') {
+                // Extract text from PDF
+                try {
+                    const text = await PdfParser.readPdf(file);
+                    extractedContent.push({ file, text });
+                } catch (error) {
+                    console.error("Error extracting text from PDF", file.name, error);
+                }
+            } else if (['txt', 'md'].includes(fileExtension)) { 
+                // Extract text from text file
+                try {
+                    let fr = new FileReader();
+                    fr.onload = function() {
+                        const text = fr.result;
+                        extractedContent.push({ file, text });
+                    };
+                    fr.readAsText(file);
+                } catch (error) {
+                    console.error("Error extracting text from text file", file.name, error);
+                }
+            } else if (fileExtension === 'docx') {
+                // Extract text from PDF, DOC, DOCX
+                try {
+                    const text = await DocxParser.readDocx(file);
+                    extractedContent.push({ file, text });
+                } catch (error) {
+                    console.error("Error extracting text from Docx", file.name, error);
+                }
+            } else if (fileExtension === 'doc') {
+                // Extract text from PDF, DOC, DOCX
+                try {
+                    console.log("Extracting text from DOC file is currently not supported."); 
+                } catch (error) {
+                    console.error("Error extracting text from Doc", file.name, error);
+                }
+            } else {
+                // Assume it's an image and extract text from image
+                try {
+                    const text = await extract_text_from_image(file);
+                    extractedContent.push({ file, text });
+                } catch (error) {
+                    console.error("Error extracting text from image", file.name, error);
+                }
+            }
+        }
+
+        // Update state with extracted content
+        onUpload(extractedContent);
+
+        // You can now do something with the extractedContent, like sending it to a server or storing it
+        console.log("Extracted content:", extractedContent);
+    }, []);
 
     const handleDrop = useCallback((event) => {
       event.preventDefault();
@@ -218,23 +219,22 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       console.log("Selected document:", document);
       setShowDocumentModal(false);
       const extractedContent = [];
+      const id = document.id;
       try {
           const text = await documentParser.readDocument(document);
-          const id = document.id;
           extractedContent.push({ id, text });
       } catch (error) {
           console.error("Error extracting text from Document", document.id, error);
       }
 
       setSelectedFiles((prevFiles) => {
-        return [...prevFiles, ...extractedContent];
+        return [...prevFiles, {name:id, lastModified: new Date()}];
       });
 
       setFileSelections((prevSelections) => {
           const newSelections = { ...prevSelections };
-          extractedContent.forEach((file) => {
-              newSelections[file.name] = true;
-          });
+          newSelections[id] = true;
+        
           return newSelections;
       });
       
@@ -256,32 +256,30 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         onUpload(extractedContent);
 
         setSelectedFiles((prevFiles) => {
-            return [...prevFiles, ...extractedContent];
+            return [...prevFiles, {name:url, lastModified: new Date()}];
         });
 
         setFileSelections((prevSelections) => {
             const newSelections = { ...prevSelections };
-            extractedContent.forEach((file) => {
-                newSelections[file.name] = true;
-            });
+            newSelections[url] = true;
             return newSelections;
         });
 
-    }, []);
+    }, [selectedFiles, fileSelections, onUpload]);
 
     // Update selectedFiles when uploadedFiles prop changes
-    useEffect(() => {
-        // Ensure uploadedFiles is an array before updating the state
-        if (Array.isArray(uploadedFiles)) {
-            setSelectedFiles(uploadedFiles);
+    // useEffect(() => {
+    //     // Ensure uploadedFiles is an array before updating the state
+    //     if (Array.isArray(uploadedFiles)) {
+    //         setSelectedFiles(uploadedFiles);
 
-            const initialSelections = {};
-            uploadedFiles.forEach((file) => {
-                initialSelections[file.name] = false; // Not selected initially
-            });
-            setFileSelections(initialSelections);
-        }
-    }, [uploadedFiles]);
+    //         const initialSelections = {};
+    //         uploadedFiles.forEach((file) => {
+    //             initialSelections[file.name] = false; // Not selected initially
+    //         });
+    //         setFileSelections(initialSelections);
+    //     }
+    // }, [uploadedFiles]);
 
     return (
         <div className="upload-section">
@@ -313,7 +311,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                   />
                   <label htmlFor="content-upload" className="upload-label">
                     {selectedFiles.length > 0
-                      ? `${selectedFiles.length} files selected`
+                      ? `${selectedFiles.length} files uploaded`
                       : "Upload Template"}
                   </label>
                 </div>
