@@ -29,6 +29,11 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
     const [fileSelections, setFileSelections] = useState({}); // Track selection state of each file
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showWebsiteModal, setShowWebsiteModal] = useState(false);
+    const [showFileContentModal, setShowFileContentModal] = useState(false);
+    const [currentFileContent, setCurrentFileContent] = useState(null);
+    const [currentExtractedText, setCurrentExtractedText] = useState(null);
+    const [currentFileName, setCurrentFileName] = useState(null);
+
     const { token } = useAuth();
 
     const toggleCollapse = () => {
@@ -69,21 +74,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
             newFiles = Array.from(filesOrEvent); // Assume it's an array of files
         }
 
-        setSelectedFiles((prevFiles) => {
-            console.log("Set Selected Files ", prevFiles, " new Files ",newFiles);
-            const currentFiles = Array.isArray(prevFiles) ? prevFiles : [];
-            return [...currentFiles, ...newFiles];
-        });
 
-        setFileSelections((prevSelections) => {
-            const newSelections = { ...prevSelections };
-            newFiles.forEach((file) => {
-                newSelections[file.name] = true;
-            });
-            return newSelections;
-        });
-
-        
         // If it was an event, we pass it through, otherwise, we create a fake one
         const eventToPass = filesOrEvent.target ? filesOrEvent : { target: { files: newFiles } };
         console.log("handleFileChange eventToPass", eventToPass);
@@ -91,7 +82,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         console.log("Handling content upload", files);
         if (!files) return;
         
-        const extractedContent = [];
+        let extractedContent = [];
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -101,7 +92,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                 // Extract text from PDF
                 try {
                     const text = await PdfParser.readPdf(file);
-                    extractedContent.push({ file, text });
+                    extractedContent.push({ file, text:text });
                 } catch (error) {
                     console.error("Error extracting text from PDF", file.name, error);
                 }
@@ -111,7 +102,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                     let fr = new FileReader();
                     fr.onload = function() {
                         const text = fr.result;
-                        extractedContent.push({ file, text });
+                        extractedContent.push({ file, text:text });
                     };
                     fr.readAsText(file);
                 } catch (error) {
@@ -121,7 +112,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                 // Extract text from PDF, DOC, DOCX
                 try {
                     const text = await DocxParser.readDocx(file);
-                    extractedContent.push({ file, text });
+                    extractedContent.push({ file, text:text });
                 } catch (error) {
                     console.error("Error extracting text from Docx", file.name, error);
                 }
@@ -136,12 +127,28 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                 // Assume it's an image and extract text from image
                 try {
                     const text = await extract_text_from_image(file);
-                    extractedContent.push({ file, text });
+                    extractedContent.push({ file, text:text });
                 } catch (error) {
                     console.error("Error extracting text from image", file.name, error);
                 }
             }
         }
+
+        extractedContent = structuredClone(extractedContent); // Deep copy the array
+
+        setSelectedFiles((prevFiles) => {
+            console.log("Set Selected Files ", prevFiles, " new Files ",newFiles);
+            const currentFiles = Array.isArray(prevFiles) ? prevFiles : [];
+            return [...currentFiles, ...extractedContent];
+        });
+
+        setFileSelections((prevSelections) => {
+            const newSelections = { ...prevSelections };
+            extractedContent.forEach((file) => {
+                newSelections[file.name] = true;
+            });
+            return newSelections;
+        });
 
         // Update state with extracted content
         onUpload(extractedContent);
@@ -218,17 +225,17 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       // Handle the selected document
       console.log("Selected document:", document);
       setShowDocumentModal(false);
-      const extractedContent = [];
+      let extractedContent = [];
       const id = document.id;
       try {
           const text = await documentParser.readDocument(document);
-          extractedContent.push({ id, text });
+          extractedContent.push({ file:{ name:id, file:document.content, lastModified: new Date()}, text:text });
       } catch (error) {
           console.error("Error extracting text from Document", document.id, error);
       }
-
+      extractedContent = structuredClone(extractedContent); // Deep copy the array
       setSelectedFiles((prevFiles) => {
-        return [...prevFiles, {name:id, lastModified: new Date()}];
+        return [...prevFiles, ...extractedContent];
       });
 
       setFileSelections((prevSelections) => {
@@ -245,18 +252,18 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         // Handle the added website
         console.log("Added website:", url);
         setShowWebsiteModal(false);
-        const extractedContent = [];
+        let extractedContent = [];
         try {
             const text = await WebsiteParser.readWebsite(url);
-            extractedContent.push({ url, text });
+            extractedContent.push({ file:{ name:url, file:url, lastModified: new Date()}, text:text });
         } catch (error) {
             console.error("Error extracting text from Website", url, error);
         }
 
         onUpload(extractedContent);
-
+        extractedContent = structuredClone(extractedContent); // Deep copy the array
         setSelectedFiles((prevFiles) => {
-            return [...prevFiles, {name:url, lastModified: new Date()}];
+            return [...prevFiles, ...extractedContent];
         });
 
         setFileSelections((prevSelections) => {
@@ -265,24 +272,48 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
             return newSelections;
         });
 
+        console.log("Add website ", fileSelections, selectedFiles)
+
     }, [selectedFiles, fileSelections, onUpload]);
 
-    // Update selectedFiles when uploadedFiles prop changes
-    // useEffect(() => {
-    //     // Ensure uploadedFiles is an array before updating the state
-    //     if (Array.isArray(uploadedFiles)) {
-    //         setSelectedFiles(uploadedFiles);
-
-    //         const initialSelections = {};
-    //         uploadedFiles.forEach((file) => {
-    //             initialSelections[file.name] = false; // Not selected initially
-    //         });
-    //         setFileSelections(initialSelections);
-    //     }
-    // }, [uploadedFiles]);
+    const handleFileClick = (file) => {
+      setCurrentFileName(file.name);
+      setCurrentFileContent(file.file); 
+      setCurrentExtractedText(file.text);
+      setShowFileContentModal(true);
+    };
+  
+    const closeFileContentModal = () => {
+      setShowFileContentModal(false);
+      setCurrentFileContent(null);
+      setCurrentExtractedText(null);
+    };
 
     return (
         <div className="upload-section">
+          {/* File Content Modal */}
+          {showFileContentModal && (
+            <div className="file-content-modal-backdrop">
+              <div className="file-content-modal">
+                <div className="file-content-header">
+                  <h2>{currentFileName}</h2>
+                  <button onClick={closeFileContentModal} className="close-modal-button">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="file-content-body">
+                  <div className="file-content">
+                    {/* Display the content of the file here */}
+                    <pre>{currentFileContent ? currentFileContent.toString() : 'Loading...'}</pre>
+                  </div>
+                  <div className="extracted-text">
+                    {/* Display the extracted text here */}
+                    <pre>{currentExtractedText || 'Loading...'}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="upload-header" onClick={toggleCollapse}>
             <h2 className="font-medium">{title}</h2>
             {isCollapsed ? (
@@ -352,10 +383,12 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                       <div
                         key={index}
                         className="file-item"
-                        onClick={() => toggleFileSelection(file.name)}
                       >
-                        <div className="file-checkbox">
-                          {fileSelections[file.name] ? (
+                        <div 
+                          className="file-checkbox"
+                          onClick={() => toggleFileSelection(file.file.name)}
+                        >
+                          {fileSelections[file.file.name] ? (
                             <CheckSquare />
                           ) : (
                             <Square />
@@ -363,10 +396,11 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                         </div>
                         <span
                           className={
-                            fileSelections[file.name] ? "selected-file" : ""
+                            fileSelections[file.file.name] ? "selected-file" : ""
                           }
+                          onClick={() => handleFileClick(file.file)}
                         >
-                          {file.name}
+                          {file.file.name}
                         </span>
                       </div>
                     ))}
