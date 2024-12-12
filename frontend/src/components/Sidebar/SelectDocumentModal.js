@@ -8,7 +8,7 @@ export const SelectDocumentModal = ({ isOpen, onClose, onSelect, token }) => {
     useEffect(() => {
         const fetchDocuments = async () => {
             try {
-                const response = await fetch('http://localhost:5000/api/admin/documents', {
+                const response = await fetch('http://localhost:5000/api/user/read_documents', {
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
                 if (!response.ok) {
@@ -28,6 +28,7 @@ export const SelectDocumentModal = ({ isOpen, onClose, onSelect, token }) => {
   
     const filteredDocuments = documents.filter(doc => 
         doc.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         new Date(doc.created_at).toLocaleString().toLowerCase().includes(searchTerm.toLowerCase())
     );
   
@@ -38,7 +39,7 @@ export const SelectDocumentModal = ({ isOpen, onClose, onSelect, token }) => {
                     <h2>Select Existing Document</h2>
                     <input
                         type="text"
-                        placeholder="Search by document name or creation date..."
+                        placeholder="Search by document title, id or creation date..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="modal-search-input"
@@ -47,6 +48,7 @@ export const SelectDocumentModal = ({ isOpen, onClose, onSelect, token }) => {
                         {filteredDocuments.map(doc => (
                             <div key={doc.id} className="modal-document-item" onClick={() => onSelect(doc)}>
                                 <span>{doc.id}</span>
+                                <span>{doc.title}</span>
                                 <span className="modal-document-date">
                                     {new Date(doc.created_at).toLocaleString()}
                                 </span>
