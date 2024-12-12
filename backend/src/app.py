@@ -8,7 +8,7 @@ from cli import CLI
 import threading
 import logging
 import queue
-from models import db, User, Document
+from models import db, User, Document, DocumentReadAccess
 from sqlalchemy import text
 from auth import Auth
 
@@ -116,6 +116,23 @@ class FlaskApp:
             return jsonify({    
                 'user': {'id': existing_user.id, 'email': existing_user.email, 'isAdmin': existing_user.is_admin}
             })
+        
+        @self.app.route('/api/user/read_documents', methods=['GET'])
+        @Auth.rest_auth_required
+        def get_user_documents(user_id):
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+            
+            documents = Document.query.filter_by(user_id=user_id).all()
+
+            # find all documents to which the user has read access
+            read_access_entries = DocumentReadAccess.query.filter_by(user_id=user_id).all()
+            
+            all_readable_documents = [*documents]
+            for read_access_entry in read_access_entries:
+                all_readable_documents.append(read_access_entry.document)
+            
+            return jsonify([{'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
 
         # def setup_embeddings_routes(app):
         # @self.app.route('/api/embeddings', methods=['POST'])
@@ -155,6 +172,7 @@ class FlaskApp:
 
                 document_list.append({
                     'id': doc.id,
+                    'title': doc.title,
                     'user_id': doc.user_id,
                     'created_at': doc.created_at,
                     'size_kb': size_in_kb,
@@ -208,7 +226,7 @@ class FlaskApp:
         @Auth.rest_admin_auth_required
         def get_document(document_id):
             document = Document.query.get_or_404(document_id)
-            return jsonify({'id': document.id, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content})
+            return jsonify({'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content})
 
         @self.app.route('/health')
         def health_check():
