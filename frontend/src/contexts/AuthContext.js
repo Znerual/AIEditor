@@ -1,6 +1,12 @@
 // src/contexts/AuthContext.js
-import React, { createContext, useState, useContext, useCallback } from 'react';
+import React, { createContext, useState, useContext, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+const defaultUser = {
+  id: null,
+  email: null,
+  isAdmin: false
+};
 
 const AuthContext = createContext(null);
 
@@ -8,6 +14,7 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
+
 
   const login = useCallback(async (email, password) => {
     try {
@@ -56,6 +63,34 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  const authenticateToken = useCallback(async (token) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/authenticate_token', {
+        method: 'GET',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Token authentication failed');
+      }
+
+      const data = await response.json();
+      setUser(data.user);
+      return data.user;
+      
+    } catch (error) {
+      console.error('Authentication error:', error);
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('token');
+      navigate('/login');
+      throw error;
+    }
+  },[navigate]);
+
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
@@ -63,8 +98,14 @@ export const AuthProvider = ({ children }) => {
     navigate('/login');
   }, []);
 
+  useEffect(() => {
+    if (token && !user) {
+      authenticateToken(token).catch(console.error);
+    }
+  }, [token, user, authenticateToken]);
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, register }}>
+    <AuthContext.Provider value={{ user: user || defaultUser, token, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );
@@ -75,5 +116,6 @@ export const useAuth = () => {
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 };
