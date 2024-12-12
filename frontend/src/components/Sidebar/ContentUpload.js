@@ -16,9 +16,10 @@ import { Upload,
 import { useAuth } from '../../contexts/AuthContext';
 import { AddWebsiteModal } from './AddWebsiteModel';
 import { SelectDocumentModal } from './SelectDocumentModal';
-import { PdfParser } from './utils/pdfUtils';
-import { DocxParser, DocParser } from './utils/wordUtils';
-import { WebsiteParser } from './utils/websiteUtils';
+import { PdfParser } from '../../utils/pdfUtils';
+import { DocxParser, DocParser } from '../../utils/wordUtils';
+import { WebsiteParser } from '../../utils/websiteUtils';
+import { documentParser } from '../../utils/documentUtils';
 import '../../styles/uploadSections.css';
 
 
@@ -212,13 +213,32 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         });
     };
 
-    const handleSelectDocument = (document) => {
+    const handleSelectDocument = useCallback(async (document) => {
       // Handle the selected document
       console.log("Selected document:", document);
       setShowDocumentModal(false);
+      const extractedContent = [];
+      try {
+          const text = await documentParser.readDocument(document);
+          const id = document.id;
+          extractedContent.push({ id, text });
+      } catch (error) {
+          console.error("Error extracting text from Document", document.id, error);
+      }
+
+      setSelectedFiles((prevFiles) => {
+        return [...prevFiles, ...extractedContent];
+      });
+
+      setFileSelections((prevSelections) => {
+          const newSelections = { ...prevSelections };
+          extractedContent.forEach((file) => {
+              newSelections[file.name] = true;
+          });
+          return newSelections;
+      });
       
-      // Here you can add the document to your selectedFiles or handle it as needed
-    };
+    }, []);
 
 
     const handleAddWebsite = useCallback(async (url) =>  {
@@ -230,7 +250,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
             const text = await WebsiteParser.readWebsite(url);
             extractedContent.push({ url, text });
         } catch (error) {
-            console.error("Error extracting text from Website", file.name, error);
+            console.error("Error extracting text from Website", url, error);
         }
 
         onUpload(extractedContent);
@@ -247,7 +267,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
             return newSelections;
         });
 
-    }, [url]);
+    }, []);
 
     // Update selectedFiles when uploadedFiles prop changes
     useEffect(() => {
