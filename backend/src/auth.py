@@ -1,7 +1,7 @@
 # src/auth.py
 from functools import wraps
 from typing import Union, Tuple, Optional, Callable
-from backend.src.events import WebSocketEvent
+from events import WebSocketEvent
 from flask import request, jsonify
 from flask_socketio import disconnect
 import jwt
