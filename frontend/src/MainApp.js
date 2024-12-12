@@ -54,6 +54,7 @@ export const MainApp = () => {
     }, []);
 
 
+
     const handleStructureParsed = useCallback((newContent) => {
         setEditorContent(newContent);
     }, []);
@@ -64,10 +65,13 @@ export const MainApp = () => {
         // Implementation for structure upload
     }, []);
 
-    const handleContentUpload = useCallback((files) => {
-        console.log("Handling content upload", files);
-        setUploadedContentFiles(files);
-        // Implementation for content upload
+    const handleContentUpload = useCallback((extractedContent) => {
+        // Update state with extracted content
+        setUploadedContentFiles(extractedContent);
+
+        // You can now do something with the extractedContent, like sending it to a server or storing it
+        console.log("Extracted content:", extractedContent);
+
     }, []);
 
     const handleChatAnswer = useCallback((answer) => {
