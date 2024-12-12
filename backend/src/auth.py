@@ -110,6 +110,28 @@ class Auth:
         return decorator
     
     @staticmethod
+    def rest_auth_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return jsonify({'message': 'Missing authorization header'}), 401
+
+            token = auth_header.split(" ")[1]  # Remove "Bearer " prefix
+            payload, error = Auth.decode_token(token)
+
+            if error:
+                return jsonify({'message': error}), 401
+            
+            if not payload.get('user_id', False):
+                return jsonify({'message': 'Error retrieving user_id'}), 403
+            
+            return f(payload.get('user_id', None), *args, **kwargs)
+        return decorated_function
+
+
+    
+    @staticmethod
     def rest_admin_auth_required(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
