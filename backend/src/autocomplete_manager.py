@@ -19,6 +19,7 @@ class AutocompleteManager:
         else:
             genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.file_context = []
         
     def get_suggestions(self, content, cursor_position):
         """

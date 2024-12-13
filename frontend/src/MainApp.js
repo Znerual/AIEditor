@@ -20,7 +20,6 @@ import './styles/globals.css';
 export const MainApp = () => {
     // State management
     const [uploadedStructureFile, setUploadedStructureFile] = useState(null);
-    const [uploadedContentFiles, setUploadedContentFiles] = useState([]);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [debugEvents, setDebugEvents] = useState([]);
     const [chatMessages, setChatMessages] = useState([]);
@@ -67,8 +66,7 @@ export const MainApp = () => {
 
     const handleContentUpload = useCallback((extractedContent) => {
         // Update state with extracted content
-        setUploadedContentFiles(extractedContent);
-
+        emit('client_content_changes', extractedContent);
         // You can now do something with the extractedContent, like sending it to a server or storing it
         console.log("Extracted content:", extractedContent);
 
@@ -365,7 +363,6 @@ export const MainApp = () => {
                             key="content-upload"
                             title="Content Files" 
                             onUpload={handleContentUpload}
-                            uploadedFiles={uploadedContentFiles}
                         />
                         <ChatWindow 
                             messages={chatMessages}

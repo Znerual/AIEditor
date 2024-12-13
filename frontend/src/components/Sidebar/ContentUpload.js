@@ -22,7 +22,7 @@ import { documentParser } from '../../utils/documentUtils';
 import '../../styles/uploadSections.css';
 
 
-export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
+export const ContentUpload = ({ title, onUpload }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState([]); // State to track selected files
     const [fileSelections, setFileSelections] = useState({}); // Track selection state of each file
@@ -32,7 +32,6 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
     const [showAddContentModal, setShowAddContentModal] = useState(false);
     const [currentFile, setCurrentFile] = useState(null);
 
-
     const { token } = useAuth();
 
     const toggleCollapse = () => {
@@ -40,15 +39,19 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
     };
 
     useEffect(() => {
+      console.log("Trigger updating the updatedFiles");
       // Filter fileSelections to only include selected files (where value is true)
       const selectedFileNames = Object.entries(fileSelections)
           .filter(([key, value]) => value)
           .map(([key]) => key);
 
+      console.log("selectedFileNames", selectedFileNames);
+
       // Filter selectedFiles to only include files that are selected
-      const updatedFiles = selectedFiles.filter(file => selectedFileNames.includes(file.name));
+      const updatedFiles = selectedFiles.filter(file => selectedFileNames.includes(file.filename));
       
-      uploadedFiles = updatedFiles; // Pass only the selected files to onUpload 
+      
+      onUpload(updatedFiles);
     }, [selectedFiles, fileSelections, onUpload]);
 
     const handleFilesChange = useCallback(async (filesOrEvent) => {
@@ -119,8 +122,8 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
             return newSelections;
           });
 
-          // Update state with extracted content
-          onUpload(data.results);
+          // // Update state with extracted content
+          // onUpload(uploadedFiles);
 
 
         } catch (err) {
@@ -200,7 +203,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       const id = document.id;
       try {
           const text = await documentParser.readDocument(document);
-          const result = { filename: id, raw:document.content, document_id: id, success: true, text_extracted: text, message: 'Document extracted' };
+          const result = { filename: id, raw:document.content, document_id: id, success: true, text_extracted: text, message: 'Document extracted', content_type: 'document' };
           setSelectedFiles((prevFiles) => {
             return [...prevFiles, result];
           });
@@ -210,7 +213,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
           
             return newSelections;
           });
-          onUpload(result);
+          // onUpload(uploadedFiles);
           
       } catch (error) {
           console.error("Error extracting text from Document", document.id, error);
@@ -252,7 +255,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
               newSelections[data.filename] = true;
               return newSelections;
           });
-          onUpload(data);
+          // onUpload(data);
         } catch (error) {
             console.error("Error extracting text from Website", url, error);
         }  
@@ -297,6 +300,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
           newSelections[newFile.filename] = true;
           return newSelections;
         });
+        // onUpload(newFile);
   
       } catch (error) {
         console.error("Error adding content", content, error);

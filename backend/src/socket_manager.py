@@ -170,6 +170,13 @@ class SocketManager:
                 self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
         
         
+        @self._socketio.on('client_content_changes')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_content_changes(user_id, data):
+            print("Content uploaded or selection changed")
+            print(data)
+            self._autocomplete_manager.file_context = data
+
         @self._socketio.on('client_chat')
         def handle_chat_event(msg):
             self._socketio.emit("server_chat_answer", f"Answer: {msg}")
