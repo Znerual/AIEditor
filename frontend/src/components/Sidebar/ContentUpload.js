@@ -18,7 +18,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AddWebsiteModal } from './AddWebsiteModel';
 import { SelectDocumentModal } from './SelectDocumentModal';
 import { AddContentModal } from './AddContentModal';
-import { WebsiteParser } from '../../utils/websiteUtils';
 import { documentParser } from '../../utils/documentUtils';
 import '../../styles/uploadSections.css';
 
@@ -224,19 +223,36 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         console.log("Added website:", url);
         setShowWebsiteModal(false);
         
+
         try {
-            const text = await WebsiteParser.readWebsite(url);
-            const result = { filename: url, raw:url, success: true, text_extracted: text, message: 'Website extracted' };
-            setSelectedFiles((prevFiles) => {
-              return [...prevFiles, result];
-            });
-    
-            setFileSelections((prevSelections) => {
-                const newSelections = { ...prevSelections };
-                newSelections[url] = true;
-                return newSelections;
-            });
-            onUpload(result);
+          const response = await fetch('http://localhost:5000/api/extract_text_website', 
+            {
+              method: 'POST',
+              headers: { 
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ url })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+        
+          const data = await response.json();
+          if (data.success !== true) {
+            throw new Error('Failed to extract text from website');
+          }
+          setSelectedFiles((prevFiles) => {
+            return [...prevFiles, data];
+          });
+  
+          setFileSelections((prevSelections) => {
+              const newSelections = { ...prevSelections };
+              newSelections[data.filename] = true;
+              return newSelections;
+          });
+          onUpload(data);
         } catch (error) {
             console.error("Error extracting text from Website", url, error);
         }  
