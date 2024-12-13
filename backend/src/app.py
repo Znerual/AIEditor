@@ -197,6 +197,7 @@ class FlaskApp:
                         'success': True,
                         'text_extracted': existing_website.text_content,
                         'message': 'Website already exists',
+                        'content_type': 'website',
                     })
 
                 # Parse the website content
@@ -239,6 +240,7 @@ class FlaskApp:
                     'success': True,
                     'text_extracted': text,
                     'message': 'Website fetched and parsed successfully',
+                    'content_type': 'website',
                 })
 
             except requests.exceptions.RequestException as e:
@@ -291,6 +293,7 @@ class FlaskApp:
                                 'success': True,
                                 'text_extracted': existing_file.text_content,
                                 'message': 'File already exists',
+                                'content_type': 'file_content',
                             })
                             continue
                         
@@ -331,6 +334,7 @@ class FlaskApp:
                             'success': True,
                             'text_extracted': file_content.text_content if file_content.text_content else False,
                             'message': 'File processed',
+                            'content_type': 'file_content',
                         })
                         
                     except Exception as e:
