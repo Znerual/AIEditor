@@ -52,6 +52,7 @@ export const DocumentManagement = () => {
 
     const handleDocumentClick = async (documentId) => {
         try {
+            console.log("Document click");
             const response = await fetch(`http://localhost:5000/api/admin/documents/${documentId}`, {
                 headers: { 'Authorization': `Bearer ${token}` },
             });
@@ -59,7 +60,9 @@ export const DocumentManagement = () => {
                 throw new Error('Failed to fetch document content');
             }
             const data = await response.json();
+            console.log("Data ", data)
             setSelectedDocument(data);
+            setSelectedDocumentContent(data.content);
             
         } catch (err) {
             console.error(err);
