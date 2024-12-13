@@ -1,4 +1,5 @@
 # src/app.py
+from datetime import datetime
 import hashlib
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -181,6 +182,17 @@ class FlaskApp:
                 if file:
                     try:
                         # Read file content
+                        file_size = file.content_length
+                        file_type = file.content_type
+                        last_modified_field_name = f"{file.filename}.lastModified"
+                        file_last_modified_str = request.form.get(last_modified_field_name)
+                        file_last_modified = None
+                        if file_last_modified_str:
+                            try:
+                                file_last_modified = datetime.fromtimestamp(int(file_last_modified_str) / 1000)
+                            except (ValueError, TypeError):
+                                print(f"Could not parse last_modified for {filename}")
+
                         content = file.read()
                         filename = secure_filename(file.filename)
                         
@@ -204,7 +216,10 @@ class FlaskApp:
                             user_id=user_id,
                             filepath=filename,
                             content=content,
-                            content_hash=content_hash
+                            content_hash=content_hash,
+                            size=file_size,
+                            file_type=file_type,
+                            last_modified=file_last_modified
                         )
                         
                         # Try to extract text content if possible
@@ -237,7 +252,7 @@ class FlaskApp:
                         
                     except Exception as e:
                         results.append({
-                            'filename': filename,
+                            'filename': file.filename,
                             'error': str(e),
                             'success': False
                         })
@@ -253,6 +268,46 @@ class FlaskApp:
                 'results': results
             })
 
+        @self.app.route('/api/user/content', methods=['GET'])
+        @Auth.rest_auth_required
+        def get_user_content(user_id):
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+
+            # Query the database for all FileContent entries associated with the user
+            content_items = FileContent.query.filter_by(user_id=user_id).all()
+
+            # Serialize the data to JSON
+            content_data = [{
+                'id': item.id,
+                'filepath': item.filepath,
+                'creation_date': item.creation_date.isoformat(),
+                'last_modified_date': item.last_modified
+            } for item in content_items]
+
+            return jsonify(content_data)
+
+        @self.app.route('/api/content/<int:content_id>', methods=['GET'])
+        @Auth.rest_auth_required
+        def get_content_file(user_id, content_id):
+            # Fetch the FileContent entry by ID and ensure it belongs to the current user
+            content_entry = FileContent.query.filter_by(id=content_id, user_id=user_id).first()
+            
+            if not content_entry:
+                return jsonify({'message': 'Content not found or access denied'}), 404
+            
+            content_data = {
+                'id': content_entry.id,
+                'filepath': content_entry.filepath,
+                'creation_date': content_entry.creation_date.isoformat(),
+                'text_content': content_entry.text_content,
+                'size' : content_entry.size,
+                'type' : content_entry.file_type,
+                'lastModified' : content_entry.last_modified
+            }
+
+            # Serve the file from the temporary directory
+            return jsonify(content_data)
 
         # def setup_embeddings_routes(app):
         # @self.app.route('/api/embeddings', methods=['POST'])

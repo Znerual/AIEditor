@@ -149,6 +149,9 @@ class FileContent(db.Model):
     text_content_hash = db.Column(db.String(256), unique=True)
     content = db.Column(db.LargeBinary, nullable=False)
     content_hash = db.Column(db.String(256), unique=True)
+    size = db.Column(db.Integer, nullable=False)
+    file_type = db.Column(db.String(256), nullable=True)
+    last_modified = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=True)
     creation_date = db.Column(db.DateTime, default=datetime.now(timezone.utc))
 
     # Relationships
