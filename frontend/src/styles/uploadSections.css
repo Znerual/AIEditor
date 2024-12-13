@@ -91,7 +91,6 @@
   font-weight: 600;
 }
 
-
 .clear-icon,
 .delete-icon {
   height: 1.2rem;
@@ -110,14 +109,16 @@
   flex-direction: column;
   gap: 0.5rem;
   margin-left: auto;
-  width: 45px; /* Set fixed width */
+  width: 45px;
+  /* Set fixed width */
 }
 
 /* Tooltip Container */
 .clear-files-button,
 .delete-selected-button,
 .select-all-button {
-  position: relative; /* Make the button a positioning context for the tooltip */
+  position: relative;
+  /* Make the button a positioning context for the tooltip */
   background: none;
   border: none;
   padding: 0.5rem;
@@ -126,19 +127,23 @@
 
 /* Tooltip Text */
 .tooltip {
-  visibility: hidden; /* Hide by default */
+  visibility: hidden;
+  /* Hide by default */
   opacity: 0;
   position: fixed;
-  transform: translate(-53%, -170%); /* Center horizontally */
+  transform: translate(-53%, -170%);
+  /* Center horizontally */
   background-color: #333;
   color: #fff;
   padding: 0.5rem;
   border-radius: 0.25rem;
-  white-space: nowrap; /* Prevent text wrapping */
-  transition: visibility 0s, opacity 0.2s ease-in-out; /* Add a transition effect */
-  z-index: 100; /* Set a high z-index to bring it to the front */
+  white-space: nowrap;
+  /* Prevent text wrapping */
+  transition: visibility 0s, opacity 0.2s ease-in-out;
+  /* Add a transition effect */
+  z-index: 100;
+  /* Set a high z-index to bring it to the front */
 }
-
 
 /* Show Tooltip on Hover */
 .clear-files-button:hover .tooltip,
@@ -152,225 +157,243 @@
 .tooltip::after {
   content: "";
   position: absolute;
-  top: 100%; /* At the bottom of the tooltip */
+  top: 100%;
+  /* At the bottom of the tooltip */
   left: 50%;
-  margin-left: -5px; /* Center the arrow */
+  margin-left: -5px;
+  /* Center the arrow */
   border-width: 5px;
   border-style: solid;
-  border-color: #333 transparent transparent transparent; /* Make an upward-pointing arrow */
+  border-color: #333 transparent transparent transparent;
+  /* Make an upward-pointing arrow */
 }
 
-  /* Modal Backdrop */
-  .modal-backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.5);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-  }
+/* Modal Backdrop */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
 
-  /* Modal Content */
-  .modal-content {
-      background-color: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      max-width: 500px;
-      width: 90%;
-  }
+/* Modal Content */
+.modal-content {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  width: 90%;
+}
 
-  /* Modal Search Input */
-  .modal-search-input {
-      width: calc(100% - 20px);
-      padding: 10px;
-      margin-bottom: 15px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-  }
+/* Modal Search Input */
+.modal-search-input {
+  width: calc(100% - 20px);
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
 
-  /* Modal Document List */
-  .modal-document-list {
-      max-height: 300px;
-      overflow-y: auto;
-      margin-bottom: 15px;
-  }
+/* Modal Document List */
+.modal-document-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+}
 
-  /* Modal Document Item */
-  .modal-document-item {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-  }
+/* Modal Document Item */
+.modal-document-item {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-  .modal-document-item:hover {
-      background-color: #f5f5f5;
-  }
+.modal-document-item:hover {
+  background-color: #f5f5f5;
+}
 
-  /* Modal Document Date */
-  .modal-document-date {
-      font-size: 0.8em;
-      color: #666;
-  }
+/* Modal Document Date */
+.modal-document-date {
+  font-size: 0.8em;
+  color: #666;
+}
 
-  /* Modal Close Button */
-  .modal-close-button {
-      padding: 10px 20px;
-      background-color: #f44336;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-  }
+/* Modal Close Button */
+.modal-close-button {
+  padding: 10px 20px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 
-  .modal-close-button:hover {
-      background-color: #d32f2f;
-  }
+.modal-close-button:hover {
+  background-color: #d32f2f;
+}
 
-  /* Icon Buttons Container */
-  .icon-buttons-container {
-      display: flex;
-      justify-content: flex-end; /* Align buttons to the right */
-      gap: 0.5rem;
-      margin-top: 1rem;
-  }
+/* Icon Buttons Container */
+.icon-buttons-container {
+  display: flex;
+  justify-content: flex-end;
+  /* Align buttons to the right */
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
 
-  /* Icon Button */
-  .icon-button {
-      background: none;
-      border: none;
-      padding: 0.5rem;
-      cursor: pointer;
-      position: relative; /* For tooltip positioning */
-  }
+/* Icon Button */
+.icon-button {
+  background: none;
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+  position: relative;
+  /* For tooltip positioning */
+}
 
-  /* Icon Button Icon */
-  .icon-button-icon {
-      height: 1.5rem;
-      width: 1.5rem;
-      color: #2563eb; /* Or any color you prefer */
-  }
+/* Icon Button Icon */
+.icon-button-icon {
+  height: 1.5rem;
+  width: 1.5rem;
+  color: #2563eb;
+  /* Or any color you prefer */
+}
 
-  /* Icon Button Tooltip */
-  .icon-button-tooltip {
-      visibility: hidden;
-      opacity: 0;
-      position: fixed;
-      transform: translate(-53%, -170%); /* Center horizontally */
-      background-color: #333;
-      color: #fff;
-      padding: 0.5rem;
-      border-radius: 0.25rem;
-      white-space: nowrap;
-      transition: visibility 0s, opacity 0.2s ease-in-out;
-      z-index: 101;
-  }
-  /* Optional: Tooltip Arrow */
-  .icon-button-tooltip::after {
-    content: "";
-    position: absolute;
-    top: 100%; /* At the bottom of the tooltip */
-    left: 50%;
-    margin-left: -5px; /* Center the arrow */
-    border-width: 5px;
-    border-style: solid;
-    border-color: #333 transparent transparent transparent; /* Make an upward-pointing arrow */
-  }
+/* Icon Button Tooltip */
+.icon-button-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: fixed;
+  transform: translate(-53%, -170%);
+  /* Center horizontally */
+  background-color: #333;
+  color: #fff;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+  transition: visibility 0s, opacity 0.2s ease-in-out;
+  z-index: 101;
+}
 
-  /* Show Tooltip on Hover */
-  .icon-button:hover .icon-button-tooltip {
-      visibility: visible;
-      opacity: 1;
-  }
+/* Optional: Tooltip Arrow */
+.icon-button-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  /* At the bottom of the tooltip */
+  left: 50%;
+  margin-left: -5px;
+  /* Center the arrow */
+  border-width: 5px;
+  border-style: solid;
+  border-color: #333 transparent transparent transparent;
+  /* Make an upward-pointing arrow */
+}
 
-  /* Modal Buttons Container */
-  .modal-buttons {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-top: 1rem;
-  }
+/* Show Tooltip on Hover */
+.icon-button:hover .icon-button-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
 
-  /* Modal Add Button */
-  .modal-add-button {
-      flex: 1;
-      padding: 10px 20px;
-      background-color: #4caf50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-  }
+/* Modal Buttons Container */
+.modal-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
 
-  .modal-add-button:hover {
-      background-color: #367c39;
-  }
+/* Modal Add Button */
+.modal-add-button {
+  flex: 1;
+  padding: 10px 20px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 
+.modal-add-button:hover {
+  background-color: #367c39;
+}
 
-  .file-content-modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5); /* Grayed out background */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000; /* Ensure it's on top */
-  }
-  
-  .file-content-modal {
-    background-color: white;
-    width: 75%;
-    height: 75%;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .file-content-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px;
-    border-bottom: 1px solid #ccc;
-  }
-  
-  .file-content-header h2 {
-    margin: 0;
-    font-size: 1.2rem;
-  }
-  
-  .close-modal-button {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
-  
-  .file-content-body {
-    display: flex;
-    flex-grow: 1;
-  }
-  
-  .file-content,
-  .extracted-text {
-    width: 50%;
-    padding: 15px;
-    overflow: auto;
-  }
-  
-  .file-content pre,
-  .extracted-text pre {
-    white-space: pre-wrap; /* Preserve line breaks and wrap text */
-    font-family: 'Courier New', Courier, monospace;
-  }
+/* File Content Modal Backdrop */
+.file-content-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  /* Grayed out background */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  /* Ensure it's on top */
+}
+
+/* File Content Modal */
+.file-content-modal {
+  background-color: white;
+  width: 75%;
+  height: 75%;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+/* File Content Header */
+.file-content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #ccc;
+}
+
+.file-content-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.close-modal-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* File Content Body */
+.file-content-body {
+  display: flex;
+  flex-grow: 1;
+  overflow: hidden; /* Prevent body from expanding beyond modal */
+}
+
+.file-content,
+.file-content-extracted-text {
+  width: 50%;
+  padding: 15px;
+  overflow-y: auto; /* Enable vertical scrolling for each section */
+}
+
+.file-content pre,
+.file-content-extracted-text pre {
+  white-space: pre-wrap;
+  /* Preserve line breaks and wrap text */
+  font-family: 'Courier New', Courier, monospace;
+}
