@@ -49,7 +49,54 @@ Follow the steps below to set up Eddy on your local machine.
 
 ### Step 2: Setup the Backend Environment
 
-Create a new virtual environment and install the packages from the requirements.txt
+Create a new virtual environment and install the packages from the requirements.txt.
+Also, the following dependencies OS are required:
+
+**UbuntuDebian**
+```bash
+sudo apt-get install python3-dev libxml2-dev libxslt1-dev antiword unrtf poppler-utils tesseract-ocr \
+flac ffmpeg lame libmad0 libsox-fmt-mp3 sox libjpeg-dev swig ghostscript pstotext
+```
+
+
+> Note: For Ubuntu 24.04, there is no recompiled pstotext available. Therefore, we need to build it from source.
+> Install build dependencies:
+> ```bash
+> sudo apt install build-essential git devscripts dpkg-dev equivs
+> ```
+> Clone the code from the repository:
+> `https://code.launchpad.net/~git-ubuntu-import/ubuntu/+source/pstotext/+git/pstotext/+ref/ubuntu/noble`
+> Switch to the directory of pstotext
+> Install the dependencies listed in the debian/control file of the package:
+> ```bash
+> sudo mk-build-deps -i
+> ```
+> Install the dependency package, for me this installed no packages:
+> ```bash
+> sudo apt install ./pstotext-build-deps_1.9-7_all.deb
+> ```
+> Install the tarball and place it in the parent directory of the pstotext directory:
+> http://archive.ubuntu.com/ubuntu/pool/universe/p/pstotext/pstotext_1.9.orig.tar.gz
+> Remove the dependency package pstotext-build-deps_1.9-7_all.deb
+> Run the build (-us skips signing the source package, -uc skips signing the .changes file):
+> ```bash
+> dpkg-buildpackage -us -uc
+> ```
+> Switch to the parent directory of the pstotext directory and make the deb executable
+> ```bash
+> chmod u+x pstotext_1.9-7_amd64.deb
+> ```
+> Install the deb package:
+> ```bash
+> sudo apt install ./pstotext_1.9-7_amd64.deb
+> ```
+
+**MacOS**
+```bash
+brew cask install xquartz
+brew install poppler antiword unrtf tesseract swig
+```
+
 Then, the backend server can be started by running the `app.py` script:
 
 ```bash
@@ -96,8 +143,6 @@ npx create-react-app frontend
 npm install react-quill @radix-ui/react-collapsible lucide-react --save
 npm install react-router-dom --save
 npm install react-confetti --save
-npm install pdfjs-dist --save
-npm mammoth --save
 ```
 
 3. Set up TailwindCSS:
