@@ -11,3 +11,6 @@ psycopg2
 lxml
 cssutils
 pgvector
+textract
+pdfminer
+setuptools
