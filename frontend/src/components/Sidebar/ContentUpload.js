@@ -10,12 +10,14 @@ import { Upload,
     Trash2, 
     CheckCircle2,
     FilePlus,
-    Link
+    Link,
+    FolderPlus
 } from 'lucide-react';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { AddWebsiteModal } from './AddWebsiteModel';
 import { SelectDocumentModal } from './SelectDocumentModal';
+import { AddContentModal } from './AddContentModal';
 import { WebsiteParser } from '../../utils/websiteUtils';
 import { documentParser } from '../../utils/documentUtils';
 import '../../styles/uploadSections.css';
@@ -28,6 +30,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showWebsiteModal, setShowWebsiteModal] = useState(false);
     const [showFileContentModal, setShowFileContentModal] = useState(false);
+    const [showAddContentModal, setShowAddContentModal] = useState(false);
     const [currentFile, setCurrentFile] = useState(null);
 
 
@@ -70,6 +73,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
           const formData = new FormData();
           files.forEach(file => {
             formData.append('files', file);
+            formData.append(`${file.name}.lastModified`, file.lastModified);
           });
     
           const response = await fetch('http://localhost:5000/api/extract_text', {
@@ -252,6 +256,37 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       setCurrentFile(null);
     };
 
+    const handleAddContent = useCallback(async (content) => {
+      // Handle the added content
+      setShowAddContentModal(false);
+  
+      try {
+        // Assuming content is an array of file-like objects
+        const newFile = {
+          filename: content.filepath,
+          raw: {
+            size: content.size,
+            type: content.type,
+            lastModified: content.lastModified,
+          },
+          success: true,
+          text_extracted: content.text_content,
+          message: 'Content added',
+        };
+    
+  
+        setSelectedFiles(prevFiles => [...prevFiles, newFile]);
+        setFileSelections(prevSelections => {
+          const newSelections = { ...prevSelections };
+          newSelections[newFile.filename] = true;
+          return newSelections;
+        });
+  
+      } catch (error) {
+        console.error("Error adding content", content, error);
+      }
+  }, []);
+
     return (
         <div className="upload-section">
           {/* File Content Modal */}
@@ -316,6 +351,14 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                   </label>
                 </div>
                 <div className="icon-buttons-container">
+                      <button
+                          className="icon-button"
+                          onClick={() => setShowAddContentModal(true)}
+                          aria-label="Add Content"
+                      >
+                          <FolderPlus className="icon-button-icon" />
+                          <span className="icon-button-tooltip">Add Content</span>
+                      </button>  
                     <button
                         className="icon-button"
                         onClick={() => setShowDocumentModal(true)}
@@ -344,6 +387,12 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                     isOpen={showWebsiteModal}
                     onClose={() => setShowWebsiteModal(false)}
                     onAdd={handleAddWebsite}
+                />
+                <AddContentModal
+                    isOpen={showAddContentModal}
+                    onClose={() => setShowAddContentModal(false)}
+                    onAdd={handleAddContent}
+                    token={token}
                 />
               {selectedFiles.length > 0 && (
                 <div className="file-list-container">
