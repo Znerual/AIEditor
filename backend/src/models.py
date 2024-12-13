@@ -132,26 +132,40 @@ class User(db.Model):
     # Relationships
     read_access_documents = db.relationship('DocumentReadAccess', back_populates='user', lazy='dynamic')
     edit_access_documents = db.relationship('DocumentEditAccess', back_populates='user', lazy='dynamic')
-
-
+    
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
+class FileContent(db.Model):
+    __tablename__ = 'file_contents'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    filepath = db.Column(db.String, unique=True, index=True)
+    text_content = db.Column(db.Text, nullable=True)
+    text_content_hash = db.Column(db.String(256), unique=True)
+    content = db.Column(db.LargeBinary, nullable=False)
+    content_hash = db.Column(db.String(256), unique=True)
+    creation_date = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+
+    # Relationships
+    file_embeddings = db.relationship('FileEmbedding', back_populates='content', lazy='dynamic')
+    
 class FileEmbedding(db.Model):
     __tablename__ = "file_embeddings"
 
     id = db.Column(db.Integer, primary_key=True, index=True, unique=True)
     document_id = db.Column(db.String(36), db.ForeignKey("documents.id"), nullable=True)  # Relation to Document
-    filepath = db.Column(db.String, unique=True, index=True)
-    non_text_content = db.Column(db.LargeBinary, nullable=True)
-    content_hash = db.Column(db.String(256), unique=True)
-    sequence_ids = db.Column(db.ARRAY(db.Integer))
+    content_id = db.Column(db.Integer, db.ForeignKey("file_contents.id"), nullable=True)
+    creation_date = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+
 
     # Relationship to SequenceEmbedding
     sequences = db.relationship("SequenceEmbedding", back_populates="file", cascade="all, delete-orphan")
+    content = db.relationship("FileContent", back_populates="file_embeddings", lazy='joined')
 
 
 class SequenceEmbedding(db.Model):

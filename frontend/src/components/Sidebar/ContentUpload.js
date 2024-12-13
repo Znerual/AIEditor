@@ -16,8 +16,6 @@ import { Upload,
 import { useAuth } from '../../contexts/AuthContext';
 import { AddWebsiteModal } from './AddWebsiteModel';
 import { SelectDocumentModal } from './SelectDocumentModal';
-import { PdfParser } from '../../utils/pdfUtils';
-import { DocxParser } from '../../utils/wordUtils';
 import { WebsiteParser } from '../../utils/websiteUtils';
 import { documentParser } from '../../utils/documentUtils';
 import '../../styles/uploadSections.css';
@@ -30,9 +28,8 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showWebsiteModal, setShowWebsiteModal] = useState(false);
     const [showFileContentModal, setShowFileContentModal] = useState(false);
-    const [currentFileContent, setCurrentFileContent] = useState(null);
-    const [currentExtractedText, setCurrentExtractedText] = useState(null);
-    const [currentFileName, setCurrentFileName] = useState(null);
+    const [currentFile, setCurrentFile] = useState(null);
+
 
     const { token } = useAuth();
 
@@ -52,28 +49,15 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       uploadedFiles = updatedFiles; // Pass only the selected files to onUpload 
     }, [selectedFiles, fileSelections, onUpload]);
 
-
-    const extract_text_from_image = async (file) => {
-      console.log("Simulating text extraction from image:", file.name);
-      // Replace this with your actual image-to-text logic (e.g., using an OCR library)
-      return new Promise((resolve) => {
-          setTimeout(() => {
-          resolve("Extracted text from image: " + file.name);
-          }, 1000);
-      });
-    };
-
-
     const handleFilesChange = useCallback(async (filesOrEvent) => {
         let newFiles;
         console.log("handleFilesChange filesOrEvent", filesOrEvent);
         // Check if it's an event from an input element or a direct array of files
-        if (filesOrEvent.target && filesOrEvent.target.files) {
-            newFiles = Array.from(filesOrEvent.target.files);
-        } else {
+        if (!(filesOrEvent.target && filesOrEvent.target.files)) {
             newFiles = Array.from(filesOrEvent); // Assume it's an array of files
+        } else {
+            newFiles = filesOrEvent;
         }
-
 
         // If it was an event, we pass it through, otherwise, we create a fake one
         const eventToPass = filesOrEvent.target ? filesOrEvent : { target: { files: newFiles } };
@@ -82,79 +66,63 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
         console.log("Handling content upload", files);
         if (!files) return;
         
-        let extractedContent = [];
+        try {
+          const formData = new FormData();
+          files.forEach(file => {
+            formData.append('files', file);
+          });
+    
+          const response = await fetch('http://localhost:5000/api/extract_text', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+          });
+          console.log("Response ", response);
+    
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+    
+          const data = await response.json();
 
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const fileExtension = file.name.split('.').pop().toLowerCase();
+          console.log("Data ", data);
+          if (data.success !== true) {
+            throw new Error('Failed to extract text from files');
+          }
 
-            if (fileExtension === 'pdf') {
-                // Extract text from PDF
-                try {
-                    const text = await PdfParser.readPdf(file);
-                    extractedContent.push({ file, text:text });
-                } catch (error) {
-                    console.error("Error extracting text from PDF", file.name, error);
-                }
-            } else if (['txt', 'md'].includes(fileExtension)) { 
-                // Extract text from text file
-                try {
-                    let fr = new FileReader();
-                    fr.onload = function() {
-                        const text = fr.result;
-                        extractedContent.push({ file, text:text });
-                    };
-                    fr.readAsText(file);
-                } catch (error) {
-                    console.error("Error extracting text from text file", file.name, error);
-                }
-            } else if (fileExtension === 'docx') {
-                // Extract text from PDF, DOC, DOCX
-                try {
-                    const text = await DocxParser.readDocx(file);
-                    extractedContent.push({ file, text:text });
-                } catch (error) {
-                    console.error("Error extracting text from Docx", file.name, error);
-                }
-            } else if (fileExtension === 'doc') {
-                // Extract text from PDF, DOC, DOCX
-                try {
-                    console.log("Extracting text from DOC file is currently not supported."); 
-                } catch (error) {
-                    console.error("Error extracting text from Doc", file.name, error);
-                }
-            } else {
-                // Assume it's an image and extract text from image
-                try {
-                    const text = await extract_text_from_image(file);
-                    extractedContent.push({ file, text:text });
-                } catch (error) {
-                    console.error("Error extracting text from image", file.name, error);
-                }
+          // Add the raw file to each successful result
+          const resultsWithRawFiles = data.results.map((result, index) => {
+            if (result.success) {
+              return {
+                ...result,
+                raw: files[index]
+              };
             }
-        }
-
-        extractedContent = structuredClone(extractedContent); // Deep copy the array
-
-        setSelectedFiles((prevFiles) => {
-            console.log("Set Selected Files ", prevFiles, " new Files ",newFiles);
+            return result;
+          });
+          
+          setSelectedFiles((prevFiles) => {
             const currentFiles = Array.isArray(prevFiles) ? prevFiles : [];
-            return [...currentFiles, ...extractedContent];
-        });
+            const newFiles = Array.isArray(resultsWithRawFiles) ? resultsWithRawFiles : [];
+            console.log("Set Selected Files ", prevFiles, " new Files ",newFiles);
+            return [...currentFiles, ...newFiles];
+          });
 
-        setFileSelections((prevSelections) => {
+          setFileSelections((prevSelections) => {
             const newSelections = { ...prevSelections };
-            extractedContent.forEach((file) => {
-                newSelections[file.name] = true;
+            resultsWithRawFiles.forEach((file) => {
+                newSelections[file.filename] = true;
             });
             return newSelections;
-        });
+          });
 
-        // Update state with extracted content
-        onUpload(extractedContent);
+          // Update state with extracted content
+          onUpload(data.results);
 
-        // You can now do something with the extractedContent, like sending it to a server or storing it
-        console.log("Extracted content:", extractedContent);
+
+        } catch (err) {
+          throw new Error('Failed to upload files ', err);
+        }
     }, []);
 
     const handleDrop = useCallback((event) => {
@@ -225,68 +193,63 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
       // Handle the selected document
       console.log("Selected document:", document);
       setShowDocumentModal(false);
-      let extractedContent = [];
+  
       const id = document.id;
       try {
           const text = await documentParser.readDocument(document);
-          extractedContent.push({ file:{ name:id, file:document.content, lastModified: new Date()}, text:text });
+          const result = { filename: id, raw:document.content, document_id: id, success: true, text_extracted: text, message: 'Document extracted' };
+          setSelectedFiles((prevFiles) => {
+            return [...prevFiles, result];
+          });
+          setFileSelections((prevSelections) => {
+            const newSelections = { ...prevSelections };
+            newSelections[id] = true;
+          
+            return newSelections;
+          });
+          onUpload(result);
+          
       } catch (error) {
           console.error("Error extracting text from Document", document.id, error);
       }
-      extractedContent = structuredClone(extractedContent); // Deep copy the array
-      setSelectedFiles((prevFiles) => {
-        return [...prevFiles, ...extractedContent];
-      });
-
-      setFileSelections((prevSelections) => {
-          const newSelections = { ...prevSelections };
-          newSelections[id] = true;
-        
-          return newSelections;
-      });
-      
-    }, []);
+    }, [onUpload]);
 
 
     const handleAddWebsite = useCallback(async (url) =>  {
         // Handle the added website
         console.log("Added website:", url);
         setShowWebsiteModal(false);
-        let extractedContent = [];
+        
         try {
             const text = await WebsiteParser.readWebsite(url);
-            extractedContent.push({ file:{ name:url, file:url, lastModified: new Date()}, text:text });
+            const result = { filename: url, raw:url, success: true, text_extracted: text, message: 'Website extracted' };
+            setSelectedFiles((prevFiles) => {
+              return [...prevFiles, result];
+            });
+    
+            setFileSelections((prevSelections) => {
+                const newSelections = { ...prevSelections };
+                newSelections[url] = true;
+                return newSelections;
+            });
+            onUpload(result);
         } catch (error) {
             console.error("Error extracting text from Website", url, error);
-        }
-
-        onUpload(extractedContent);
-        extractedContent = structuredClone(extractedContent); // Deep copy the array
-        setSelectedFiles((prevFiles) => {
-            return [...prevFiles, ...extractedContent];
-        });
-
-        setFileSelections((prevSelections) => {
-            const newSelections = { ...prevSelections };
-            newSelections[url] = true;
-            return newSelections;
-        });
+        }  
 
         console.log("Add website ", fileSelections, selectedFiles)
 
-    }, [selectedFiles, fileSelections, onUpload]);
+    }, [onUpload]);
 
     const handleFileClick = (file) => {
-      setCurrentFileName(file.name);
-      setCurrentFileContent(file.file); 
-      setCurrentExtractedText(file.text);
+      console.log("File click ", file);
+      setCurrentFile(file);
       setShowFileContentModal(true);
     };
   
     const closeFileContentModal = () => {
       setShowFileContentModal(false);
-      setCurrentFileContent(null);
-      setCurrentExtractedText(null);
+      setCurrentFile(null);
     };
 
     return (
@@ -296,7 +259,7 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
             <div className="file-content-modal-backdrop">
               <div className="file-content-modal">
                 <div className="file-content-header">
-                  <h2>{currentFileName}</h2>
+                  <h2>{currentFile.filename}</h2>
                   <button onClick={closeFileContentModal} className="close-modal-button">
                     <X size={20} />
                   </button>
@@ -304,11 +267,17 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                 <div className="file-content-body">
                   <div className="file-content">
                     {/* Display the content of the file here */}
-                    <pre>{currentFileContent ? currentFileContent.toString() : 'Loading...'}</pre>
+                    {currentFile.raw && (
+                      <div className="file-content-details">
+                        <pre>{currentFile.raw.type ? currentFile.raw.type.toString() : 'Unknown Type'}</pre>
+                        <pre>{currentFile.raw.lastModified ? new Date(currentFile.raw.lastModified).toDateString() : 'No Creation Date'}</pre>
+                        <pre>{currentFile.raw.size ? currentFile.raw.size : 'Unknown Size'}</pre>
+                      </div>
+                    )}
                   </div>
-                  <div className="extracted-text">
+                  <div className="file-content-extracted-text">
                     {/* Display the extracted text here */}
-                    <pre>{currentExtractedText || 'Loading...'}</pre>
+                    <pre>{currentFile.text_extracted || 'No text extracted'}</pre>
                   </div>
                 </div>
               </div>
@@ -386,9 +355,9 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                       >
                         <div 
                           className="file-checkbox"
-                          onClick={() => toggleFileSelection(file.file.name)}
+                          onClick={() => toggleFileSelection(file.filename)}
                         >
-                          {fileSelections[file.file.name] ? (
+                          {fileSelections[file.filename] ? (
                             <CheckSquare />
                           ) : (
                             <Square />
@@ -396,11 +365,11 @@ export const ContentUpload = ({ title, onUpload, uploadedFiles = [] }) => {
                         </div>
                         <span
                           className={
-                            fileSelections[file.file.name] ? "selected-file" : ""
+                            fileSelections[file.filename] ? "selected-file" : ""
                           }
-                          onClick={() => handleFileClick(file.file)}
+                          onClick={() => handleFileClick(file)}
                         >
-                          {file.file.name}
+                          {file.filename}
                         </span>
                       </div>
                     ))}

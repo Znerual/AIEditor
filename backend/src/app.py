@@ -1,4 +1,5 @@
 # src/app.py
+import hashlib
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -8,10 +9,15 @@ from cli import CLI
 import requests
 import threading
 import logging
+import textract
 import queue
-from models import db, User, Document, DocumentReadAccess
+import config
+import os
+import tempfile
+from models import db, User, Document, DocumentReadAccess, FileContent
 from sqlalchemy import text
 from auth import Auth
+from werkzeug.utils import secure_filename
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +45,10 @@ class FlaskApp:
                 "methods": ["GET", "POST", "OPTIONS"]
             }
         })
+
+        # Init the temporary directory
+        if not os.path.exists(Config.TMP_PATH):
+            os.makedirs(Config.TMP_PATH)
 
         self.message_queue = queue.Queue() # Create the message queue
         self.socket_manager = SocketManager()
@@ -152,6 +162,98 @@ class FlaskApp:
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching website: {e}")
                 return jsonify({'error': 'Failed to fetch website', 'message': str(e)}), 500
+
+        @self.app.route('/api/extract_text', methods=['POST'])
+        @Auth.rest_auth_required
+        def extract_text_route(user_id):
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+
+            if 'files' not in request.files:
+                return jsonify({'message': 'No files provided'}), 400
+
+            files = request.files.getlist('files')
+            if not files:
+                return jsonify({'message': 'No files selected'}), 400
+
+            results = []
+            for file in files:
+                if file:
+                    try:
+                        # Read file content
+                        content = file.read()
+                        filename = secure_filename(file.filename)
+                        
+                        # Generate content hash
+                        content_hash = hashlib.sha256(content).hexdigest()
+                        
+                        # Check if file already exists
+                        existing_file = FileContent.query.filter_by(content_hash=content_hash).first()
+                        if existing_file:
+                            results.append({
+                                'filename': filename,
+                                'file_id': existing_file.id,
+                                'success': True,
+                                'text_extracted': existing_file.text_content,
+                                'message': 'File already exists',
+                            })
+                            continue
+                        
+                        # Create new file content entry
+                        file_content = FileContent(
+                            user_id=user_id,
+                            filepath=filename,
+                            content=content,
+                            content_hash=content_hash
+                        )
+                        
+                        # Try to extract text content if possible
+                        try:
+                            temp_file_path = os.path.join(Config.TMP_PATH, filename)
+                            with open(temp_file_path, 'wb') as temp_file:
+                                temp_file.write(content)
+                            
+                            # Process the file with textact (implement your processing logic here)
+                            extracted_text = textract.process(temp_file_path).decode()
+                            os.remove(temp_file_path)
+                            text_content_hash = hashlib.sha256(extracted_text.encode()).hexdigest()
+                            
+                            file_content.text_content = extracted_text
+                            file_content.text_content_hash = text_content_hash
+                        except Exception as text_error:
+                            # If text extraction fails, continue without text content
+                            print(f"Text extraction failed: {str(text_error)}")
+                        
+                        db.session.add(file_content)
+                        db.session.commit()
+                        
+                        results.append({
+                            'filename': filename,
+                            'file_id': file_content.id,
+                            'success': True,
+                            'text_extracted': file_content.text_content if file_content.text_content else False,
+                            'message': 'File processed',
+                        })
+                        
+                    except Exception as e:
+                        results.append({
+                            'filename': filename,
+                            'error': str(e),
+                            'success': False
+                        })
+                else:
+                    results.append({
+                        'filename': 'unknown',
+                        'error': 'Invalid file',
+                        'success': False
+                    })
+            
+            return jsonify({
+                'success': True,
+                'results': results
+            })
+
+
         # def setup_embeddings_routes(app):
         # @self.app.route('/api/embeddings', methods=['POST'])
         # def create_embedding_route():
