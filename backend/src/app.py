@@ -19,6 +19,7 @@ from models import db, User, Document, DocumentReadAccess, FileContent
 from sqlalchemy import text
 from auth import Auth
 from werkzeug.utils import secure_filename
+from bs4 import BeautifulSoup
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -147,6 +148,7 @@ class FlaskApp:
             return jsonify([{'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
 
         @self.app.route('/api/fetch-website', methods=['GET'])
+        @Auth.rest_auth_required
         def fetch_website():
             url = request.args.get('url')
             if not url:
@@ -163,6 +165,87 @@ class FlaskApp:
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching website: {e}")
                 return jsonify({'error': 'Failed to fetch website', 'message': str(e)}), 500
+            
+        @self.app.route('/api/extract_text_website', methods=['POST'])
+        @Auth.rest_auth_required
+        def extract_text_website(user_id):
+            data = request.get_json()
+            url = data.get('url')
+            print("Get url ",url)
+            if not url:
+                return jsonify({'error': 'Missing URL parameter'}), 400
+
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                
+                content = response.content
+                content_hash = hashlib.sha256(content).hexdigest()
+                
+                # Check if the website already exists in the database
+                existing_website = FileContent.query.filter_by(content_hash=content_hash).first()
+                if existing_website:
+                    return jsonify({
+                        'filename': url,
+                        'file_id': existing_website.id,
+                        'raw': { 
+                            'File' : content.decode(),
+                            'type' : existing_website.file_type,
+                            'size' : existing_website.size, 
+                            'lastModified' : existing_website.last_modified
+                            },
+                        'success': True,
+                        'text_extracted': existing_website.text_content,
+                        'message': 'Website already exists',
+                    })
+
+                # Parse the website content
+                soup = BeautifulSoup(response.content, 'html.parser')
+                for script in soup(['script', 'style']):
+                    script.decompose()
+                text = soup.get_text()
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = '\n'.join(chunk for chunk in chunks if chunk)
+
+                text_content_hash = hashlib.sha256(text.encode()).hexdigest()
+
+                last_modified = datetime.now()
+                # Create a new FileContent object for the website
+                file_content = FileContent(
+                    user_id=user_id,
+                    filepath=url,
+                    content=content,
+                    content_hash=content_hash,
+                    size=len(content),
+                    file_type=response.headers.get('Content-Type', '').split(';')[0],
+                    text_content=text,
+                    text_content_hash=text_content_hash,
+                    last_modified=last_modified
+                )
+
+                db.session.add(file_content)
+                db.session.commit()
+
+                return jsonify({
+                    'filename': url,
+                    'file_id': file_content.id,
+                    'raw': {
+                        'File' : response.content.decode(),
+                        'type' : response.headers.get('Content-Type', '').split(';')[0],
+                        'size' : len(content),
+                        'lastModified' : last_modified
+                    },
+                    'success': True,
+                    'text_extracted': text,
+                    'message': 'Website fetched and parsed successfully',
+                })
+
+            except requests.exceptions.RequestException as e:
+                return jsonify({'error': 'Failed to fetch website', 'message': str(e)}), 500
+            except Exception as e:
+                print("Error ", e)
+                return jsonify({'error': 'An error occurred', 'message': str(e)}), 500
 
         @self.app.route('/api/extract_text', methods=['POST'])
         @Auth.rest_auth_required
