@@ -1,5 +1,5 @@
 # src/document_manager.py
-from models import db, Document
+from models import db, Document, User
 from typing import Optional
 from delta import Delta
 import json
@@ -12,8 +12,10 @@ class DocumentManager:
             document = Document.query.filter_by(id=document_id, user_id=user_id).first()
             if document:
                 return document
+            
+        user = User.query.filter_by(user_id=user_id).first()
                 
-        document = Document(user_id=user_id, content={"ops": []})
+        document = Document(user=user, content={"ops": []})
         db.session.add(document)
         db.session.commit()
         return document
