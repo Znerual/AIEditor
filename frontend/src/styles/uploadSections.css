@@ -397,3 +397,30 @@
   /* Preserve line breaks and wrap text */
   font-family: 'Courier New', Courier, monospace;
 }
+
+/* Modal Content List */
+.modal-content-list {
+  max-height: 300px; /* Same as .modal-document-list */
+  overflow-y: auto;
+  margin-bottom: 15px;
+}
+
+/* Modal Content Item */
+.modal-content-item {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-content-item:hover {
+  background-color: #f5f5f5; /* Same as .modal-document-item:hover */
+}
+
+/* Modal Content Date */
+.modal-content-date {
+  font-size: 0.8em;
+  color: #666; /* Same as .modal-document-date */
+}
