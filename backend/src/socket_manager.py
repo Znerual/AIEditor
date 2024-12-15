@@ -152,8 +152,9 @@ class SocketManager:
 
                  # Get and emit autocompletion suggestions
                 suggestions = self._autocomplete_manager.get_suggestions(
-                    content_str,
-                    cursor_position
+                    user_id=user_id,
+                    content=content_str,
+                    cursor_position=cursor_position
                 )
 
                 
@@ -175,7 +176,8 @@ class SocketManager:
         def handle_client_content_changes(user_id, data):
             print("Content uploaded or selection changed")
             print(data)
-            self._autocomplete_manager.file_context = data
+            file_selection_cleaned = [item for item in data if 'file_id' in item and 'content_type' in item]  
+            self._autocomplete_manager.on_user_content_change(user_id, file_selection_cleaned)
 
         @self._socketio.on('client_chat')
         def handle_chat_event(msg):
