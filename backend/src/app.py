@@ -113,7 +113,13 @@ class FlaskApp:
                 new_user.set_password(password)  # Hash the password
                 db.session.add(new_user)
                 db.session.commit()
-                return jsonify({'message': 'User registered successfully'}), 201
+
+                token = Auth.generate_token(str(new_user.id), new_user.is_admin)
+                return jsonify({
+                    'message': 'User registered successfully',
+                    'token': token,
+                    'user': {'id': new_user.id, 'email': new_user.email, 'isAdmin': new_user.is_admin}
+                }), 201
             except Exception as e:
                 db.session.rollback()  # Rollback in case of error
                 print(f"Error during registration: {e}") # Log the error for debugging
@@ -146,7 +152,7 @@ class FlaskApp:
             for read_access_entry in read_access_entries:
                 all_readable_documents.append(read_access_entry.document)
             
-            return jsonify([{'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
+            return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
 
         @self.app.route('/api/fetch-website', methods=['GET'])
         @Auth.rest_auth_required
@@ -438,6 +444,7 @@ class FlaskApp:
                 document_list.append({
                     'id': doc.id,
                     'title': doc.title,
+                    'title_manually_set': doc.title_manually_set,
                     'user_id': doc.user_id,
                     'created_at': doc.created_at,
                     'size_kb': size_in_kb,

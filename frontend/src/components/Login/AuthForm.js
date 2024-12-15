@@ -26,10 +26,10 @@ export const AuthForm  = () => {
             }
             // Play success animation
             setSuccess(true);
+            setIsRegistering(false);
 
             // Switch to login after animation
             setTimeout(() => {
-                setIsRegistering(false);
                 setSuccess(false);
                 navigate('/');
             }, 8000);
