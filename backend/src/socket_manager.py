@@ -4,8 +4,9 @@ from flask_socketio import SocketIO, join_room, leave_room
 from typing import Optional
 from events import WebSocketEvent
 from document_manager import DocumentManager
-from auth import Auth
 from autocomplete_manager import AutocompleteManager
+from dialog_manager import DialogManager
+from auth import Auth
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from models import Document, db
@@ -30,6 +31,7 @@ class SocketManager:
     def init_socket_manager(self, socketio, gemini_api_key, debug=False):
         self._socketio = socketio
         self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key, debug=debug)
+        self._dialog_manager = DialogManager(api_key=gemini_api_key, debug=debug)
         self._executor = ThreadPoolExecutor(max_workers=5)
         self._setup_handlers()
 
@@ -223,9 +225,34 @@ class SocketManager:
             self._autocomplete_manager.on_user_content_change(user_id, file_selection_cleaned)
 
         @self._socketio.on('client_chat')
-        def handle_chat_event(msg):
-            self._socketio.emit("server_chat_answer", f"Answer: {msg}")
-    
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_chat_event(user_id, msg):
+            document_id = session.get('document_id')  # Get document_id from session
+            response_data = self._dialog_manager.get_response(user_id, msg, document_id)
+
+            # Emit response and suggested edits
+            self.emit_event(WebSocketEvent("server_chat_answer", {
+                "response": response_data["response"],
+                "suggested_edits": response_data["suggested_edits"]
+            }))
+
+        @self._socketio.on('client_apply_edit')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_apply_edit(user_id, data):
+            document_id = session.get('document_id')
+            edit_id = data.get("edit_id")
+            accepted = data.get("accepted")
+
+            if document_id is None or edit_id is None or accepted is None:
+                self.emit_event(WebSocketEvent("server_error", {"message": "Invalid edit request"}))
+                return
+
+            try:
+                self._dialog_manager.apply_edit(user_id, document_id, edit_id, accepted)
+                self.emit_event(WebSocketEvent("server_edit_applied", {"edit_id": edit_id, "status": "accepted" if accepted else "rejected"}))
+            except Exception as e:
+                self.emit_event(WebSocketEvent("server_error", {"message": str(e)}))
+        
     def emit_event(self, event: WebSocketEvent, **kwargs):
         if self._socketio is None:
             raise RuntimeError("SocketIO not initialized")
