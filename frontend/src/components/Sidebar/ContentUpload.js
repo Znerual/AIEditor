@@ -275,6 +275,19 @@ export const ContentUpload = ({ title, onUpload }) => {
       setCurrentFile(file);
       setShowFileContentModal(true);
     };
+
+    const handleRemoveFile = (file) => {
+      console.log("Removing file ", file);
+      setSelectedFiles((prevFiles) => {
+        return prevFiles.filter((f) => f.filename !== file.filename);
+      });
+
+      setFileSelections((prevSelections) => {
+        const newSelections = { ...prevSelections };
+        delete newSelections[file.filename];
+        return newSelections;
+      });
+    };
   
     const closeFileContentModal = () => {
       setShowFileContentModal(false);
@@ -448,6 +461,10 @@ export const ContentUpload = ({ title, onUpload }) => {
                           onClick={() => handleFileClick(file)}
                         >
                           {file.filename}
+                        </span>
+                        <span className="file-remove-button" 
+                        onClick={() => handleRemoveFile(file)}>
+                          <X size={20} />
                         </span>
                       </div>
                     ))}
