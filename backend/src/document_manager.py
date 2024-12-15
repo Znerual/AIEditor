@@ -1,6 +1,6 @@
 # src/document_manager.py
 from models import db, Document, User
-from typing import Optional
+from typing import Optional, Union
 from delta import Delta
 import json
 from utils import delta_to_string, string_to_delta
@@ -31,8 +31,11 @@ class DocumentManager:
         return updated_content
     
     @staticmethod
-    def get_document_content(document_id: int, user_id: str, as_string=False) -> dict:
-        document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+    def get_document_content(document: Union[int, Document], user_id: str, as_string=False) -> dict:
+        if isinstance(document, int):
+            document_id = document
+            document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+        
         if not document:
             raise ValueError("Document not found")
         
