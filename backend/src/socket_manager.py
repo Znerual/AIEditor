@@ -14,6 +14,7 @@ from delta import Delta
 import uuid
 from utils import delta_to_string
 import threading
+from config import Config
 
 class SocketManager:
     _instance: Optional['SocketManager'] = None
@@ -148,7 +149,11 @@ class SocketManager:
                 if not all([document_id, request_id]):
                     raise ValueError("Missing required fields documentId and requestId in handle_text_change")
                 
-                content_str = DocumentManager.get_document_content(document_id, user_id, as_string=True)
+                document = Document.get(document_id)
+                if not document:
+                    raise ValueError("Document not found")
+                
+                content_str = DocumentManager.get_document_content(document, user_id, as_string=True)
 
                  # Get and emit autocompletion suggestions
                 suggestions = self._autocomplete_manager.get_suggestions(
@@ -165,12 +170,50 @@ class SocketManager:
                         'cursorPosition': cursor_position,
                         'requestId': request_id
                     }))
+
+                # Generate a title for the document
+                if not document.title_manually_set and len(content_str) > Config.TITLE_DOCUMENT_LENGTH_THRESHOLD:
+                    title = self._autocomplete_manager.generate_title(content_str)
+                    if title:
+                        document.title = title
+                        db.session.commit()
+                        self.emit_event(WebSocketEvent('server_document_title_generated', {
+                            'documentId': document_id,
+                            'title': title
+                        }), room=document_id, include_self=True)
+
+                
                 
             except Exception as e:
                 print(f"Error handling text change: {str(e)}")
                 self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
         
         
+        @self._socketio.on('client_title_change')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_title_change(user_id, data):
+            try:
+                document_id = data.get('documentId')
+                title = data.get('title')
+                if not all([document_id, title]):
+                    raise ValueError("Missing required fields documentId and title in handle_title_change")
+                
+                document = Document.get(document_id)
+                if not document:
+                    raise ValueError("Document not found")
+                
+                document.title = title
+                document.title_manually_set = True
+                db.session.commit()
+                self.emit_event(WebSocketEvent('client_title_change', {
+                    'documentId': document_id,
+                    'title': title
+                }), room=document_id, include_self=False)
+            except Exception as e:
+                print(f"Error handling title change: {str(e)}")
+                self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
+                return False
+            
         @self._socketio.on('client_content_changes')
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_content_changes(user_id, data):
