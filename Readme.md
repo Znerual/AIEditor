@@ -179,7 +179,7 @@ npm install @radix-ui/react-icons
 
 ```bash
 npx shadcn-ui@0.8.0 init
-npx shadcn-ui@0.8.0 add button card menubar collapsible
+npx shadcn-ui@0.8.0 add button card menubar collapsible input label
 ```
 
 2. Update aliases in the `components.json` file to:
