@@ -25,6 +25,8 @@ export const MainApp = () => {
     const [chatMessages, setChatMessages] = useState([]);
     const [editorContent, setEditorContent] = useState('');
     const [documentId, setDocumentId] = useState('');
+    const [currentDocumentTitle, setCurrentDocumentTitle] = useState('');
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
     const [suggestionIndex, setSuggestionIndex] = useState(0);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -52,7 +54,26 @@ export const MainApp = () => {
         logout();
     }, []);
 
+    const handleDocumentTitleGenerated = useCallback((event) => {
+        console.log("Document title generated", event);
+        setCurrentDocumentTitle(event.title);
+    }, []);
 
+    const handleTitleChange = useCallback((newTitle) => {
+        setCurrentDocumentTitle(newTitle);
+        // Only emit the change if the title was not set automatically
+        emit('client_title_change', {
+            title: newTitle,
+            documentId: documentId,
+        });
+        
+    }, [documentId]);
+    
+    const handleTitleEditCommit = () => {
+        setIsEditingTitle(false);
+        // Emit title change when editing is finished
+        handleTitleChange(currentDocumentTitle);
+    };
 
     const handleStructureParsed = useCallback((newContent) => {
         setEditorContent(newContent);
@@ -262,12 +283,13 @@ export const MainApp = () => {
 
     const socketEvents = useMemo(() => ({
         server_connects: () => console.log('server connected'),
+        disconnect: () => console.log('disconnected'),
         server_disconnects: () => console.log('server disconnected'),
         server_authentication_failed: handleAuthenticationFailed,
         server_document_created: handleDocumentCreated,
         server_sent_document_content: handleGetContent,
-        disconnect: () => console.log('disconnected'),
         server_autocompletion_suggestions: handleAutocompletion,
+        server_document_title_generated: handleDocumentTitleGenerated,
         server_chat_answer: handleChatAnswer,
         structure_parsed: handleStructureParsed,
         test: () => console.log("Test Event"),
@@ -349,6 +371,11 @@ export const MainApp = () => {
             <Headerbar 
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} 
                 sidebarOpen={sidebarOpen}
+                title={currentDocumentTitle}
+                isEditingTitle={isEditingTitle}
+                onTitleChange={handleTitleChange}
+                onTitleEditCommit={handleTitleEditCommit}
+                onStartTitleEdit={() => setIsEditingTitle(true)}
             />
             
             <div className="main-content">
