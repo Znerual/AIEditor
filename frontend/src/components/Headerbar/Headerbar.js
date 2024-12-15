@@ -33,32 +33,6 @@ export const Headerbar = ({
                     {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
                 </Button>
             </div>
-            <div className="document-title-label">
-            {isEditingTitle ? (
-                <div className="title-edit-group">
-                    <Input
-                        type="text"
-                        value={localTitle}
-                        onChange={(e) => setLocalTitle(e.target.value)}
-                        onBlur={onTitleEditCommit}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                onTitleEditCommit();
-                            }
-                        }}
-                        autoFocus
-                        className="title-edit-input"
-                    />
-                </div>
-            ) : (
-                <Label onClick={onStartTitleEdit} className="cursor-pointer">
-                    {title || 'Untitled Document'}
-                    <Button variant="ghost" size="icon" className="edit-title-button">
-                        <Pencil className="h-4 w-4" />
-                    </Button>
-                </Label>
-            )}
-            </div>
             <Menubar className="menubar-content">
                 <MenubarMenu>
                     <MenubarTrigger>File</MenubarTrigger>
@@ -110,6 +84,32 @@ export const Headerbar = ({
                     </MenubarContent>
                 </MenubarMenu>
             </Menubar>
+            <div className="document-title-label">
+            {isEditingTitle ? (
+                <div className="title-edit-group">
+                    <Input
+                        type="text"
+                        value={localTitle}
+                        onChange={(e) => setLocalTitle(e.target.value)}
+                        onBlur={() => onTitleEditCommit(localTitle)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                onTitleEditCommit(localTitle);
+                            }
+                        }}
+                        autoFocus
+                        className="title-edit-input"
+                    />
+                </div>
+            ) : (
+                <Label onClick={onStartTitleEdit} className="cursor-pointer">
+                    {title || 'Untitled Document'}
+                    <Button variant="ghost" size="icon" className="edit-title-button">
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                </Label>
+            )}
+            </div>
             <div className="menubar-actions">
                 {user?.isAdmin && (
                     <Link to="/admin" className={buttonVariants({ variant: "default", className: 'mr-2' })}>

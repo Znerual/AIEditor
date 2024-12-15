@@ -69,10 +69,10 @@ export const MainApp = () => {
         
     }, [documentId]);
     
-    const handleTitleEditCommit = () => {
+    const handleTitleEditCommit = (newTitle) => {
         setIsEditingTitle(false);
         // Emit title change when editing is finished
-        handleTitleChange(currentDocumentTitle);
+        handleTitleChange(newTitle);
     };
 
     const handleStructureParsed = useCallback((newContent) => {

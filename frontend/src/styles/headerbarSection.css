@@ -1,0 +1,76 @@
+/* Headerbar styles */
+.menubar-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 0.5rem;
+    background-color: white;
+    z-index: 10;
+  }
+  
+  .menubar-toggle {
+    display: flex;
+    align-items: center;
+  }
+  
+  .menubar-content {
+    display: flex;
+    flex-grow: 1;
+    border: none;
+    padding: 0;
+    margin-left: 1rem; /* Space between the toggle button and the menu */
+  }
+  
+  .menubar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  /* Title label and input styles */
+  .document-title-label {
+    display: flex;
+    align-items: center;
+    margin-left: auto; /* Push the title to the center, to the left of menubar-actions */
+    margin-right: auto; /* Push the title to the center, to the left of menubar-actions */
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748; /* Adjust color as needed */
+  }
+  
+  .title-edit-group {
+    display: flex;
+    align-items: center;
+  }
+  
+  .title-edit-input {
+    margin-right: 0.5rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    padding: 0.2rem 0.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #2d3748; /* Adjust color as needed */
+  }
+  
+  .edit-title-button {
+    margin-left: 0.5rem;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  
+  .edit-title-button .h-4\.w-4 { /* Targeting the icon inside the button */
+    color: #4a5568; /* Adjust icon color as needed */
+  }
+  
+  .edit-title-button:hover .h-4\.w-4 {
+    color: #2563eb; /* Adjust hover color as needed */
+  }
+  
+  .document-title-label:hover {
+      background-color: #f5f5f5;
+  }
