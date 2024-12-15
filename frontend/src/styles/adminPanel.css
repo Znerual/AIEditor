@@ -1,126 +1,239 @@
 /* frontend/src/components/Admin/adminPanel.css */
 
 .admin-panel {
-    font-family: Arial, sans-serif;
-    padding: 20px;
-    background-color: #f4f4f4;
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  background-color: #f4f4f4;
+}
+
+.admin-panel h1 {
+  text-align: center;
+  color: #333;
+}
+
+.admin-panel nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  text-align: center;
+}
+
+.admin-panel nav ul li {
+  display: inline;
+  margin: 0 10px;
+}
+
+.admin-panel nav ul li a {
+  text-decoration: none;
+  color: #007bff;
+  font-weight: bold;
+}
+
+.admin-panel nav ul li a:hover {
+  color: #0056b3;
+}
+
+.admin-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.admin-panel th,
+.admin-panel td {
+  text-align: left;
+  padding: 8px;
+  border: 1px solid #ddd;
+}
+
+.admin-panel th {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.admin-panel tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.admin-panel button {
+  background-color: #4CAF50;
+  color: white;
+  padding: 5px 10px;
+  margin: 2px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.admin-panel button:hover {
+  background-color: #45a049;
+}
+
+.admin-panel .selected-document,
+.admin-panel .selected-file-content {
+  margin-top: 30px;
+  background-color: white;
+  border: 1px solid #ddd;
+  padding: 10px;
+}
+
+.admin-panel .selected-document h3,
+.admin-panel .selected-file-content h3 {
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.admin-panel .selected-document pre,
+.admin-panel .selected-file-content pre {
+  white-space: pre-wrap; /* Preserve line breaks and spacing */
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.admin-panel p {
+  margin: 10px 0;
+}
+
+/* Style for loading and error messages */
+.admin-panel .loading,
+.admin-panel .error {
+  font-style: italic;
+  color: #777;
+}
+
+.admin-panel .error {
+  color: #d9534f; /* Red color for errors */
+}
+
+.admin-panel button.delete {
+  background-color: #dc3545; /* Red */
+}
+
+.admin-panel button.delete:hover {
+  background-color: #c82333;
+}
+
+.admin-panel button.make-admin {
+  background-color: #28a745; /* Green */
+}
+
+.admin-panel button.make-admin:hover {
+  background-color: #218838;
+}
+
+.admin-panel button.remove-admin {
+  background-color: #ffc107; /* Yellow */
+}
+
+.admin-panel button.remove-admin:hover {
+  background-color: #e0a800;
+}
+
+/* File Content Management Specific Styles */
+  .file-content-management,
+  .file-embedding-management {
+      margin-top: 30px;
   }
-  
-  .admin-panel h1 {
-    text-align: center;
-    color: #333;
+
+  .file-content-management h2,
+  .file-embedding-management h2 {
+      color: #333;
+      margin-bottom: 20px;
   }
-  
-  .admin-panel nav ul {
-    list-style: none;
-    padding: 0;
-    margin: 20px 0;
-    text-align: center;
+
+  .file-content-management table,
+  .file-embedding-management table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
   }
-  
-  .admin-panel nav ul li {
-    display: inline;
-    margin: 0 10px;
+
+  .file-content-management th,
+  .file-embedding-management th,
+  .file-content-management td,
+  .file-embedding-management td {
+      text-align: left;
+      padding: 8px;
+      border: 1px solid #ddd;
   }
-  
-  .admin-panel nav ul li a {
-    text-decoration: none;
-    color: #007bff;
-    font-weight: bold;
+
+  .file-content-management th,
+  .file-embedding-management th {
+      background-color: #f0f0f0;
+      color: #333;
   }
-  
-  .admin-panel nav ul li a:hover {
-    color: #0056b3;
+
+  .file-content-management td button,
+  .file-embedding-management td button {
+      padding: 5px 10px;
+      margin-right: 5px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
   }
-  
-  .admin-panel table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
+
+  .file-content-management .selected-file-content,
+  .file-embedding-management .selected-file-embedding {
+      background-color: white;
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-top: 20px;
   }
-  
-  .admin-panel th,
-  .admin-panel td {
-    text-align: left;
-    padding: 8px;
-    border: 1px solid #ddd;
+
+  .file-content-management .selected-file-content h3,
+  .file-embedding-management .selected-file-embedding h3 {
+      color: #333;
+      margin-bottom: 10px;
   }
-  
-  .admin-panel th {
-    background-color: #f0f0f0;
-    color: #333;
+
+  .file-embedding-management .file-embedding-container {
+      display: flex;
+      gap: 20px;
   }
-  
-  .admin-panel tr:nth-child(even) {
-    background-color: #f9f9f9;
+
+  .file-embedding-management .file-embedding-list,
+  .file-embedding-management .file-embedding-details {
+      flex: 1;
   }
-  
-  .admin-panel button {
-    background-color: #4CAF50;
-    color: white;
-    padding: 5px 10px;
-    margin: 2px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+
+  .file-embedding-management .sequence-list ul {
+      list-style: none;
+      padding: 0;
   }
-  
-  .admin-panel button:hover {
-    background-color: #45a049;
+
+  .file-embedding-management .sequence-list li {
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      padding: 8px;
+      margin-bottom: 5px;
+      border-radius: 4px;
+      cursor: pointer;
   }
-  
-  .admin-panel .selected-document {
-    margin-top: 30px;
-    background-color: white;
-    border: 1px solid #ddd;
-    padding: 10px;
+
+  .file-embedding-management .sequence-list li:hover {
+      background-color: #e2e6ea;
   }
-  
-  .admin-panel .selected-document h3 {
-    color: #333;
-    margin-bottom: 10px;
+
+  .file-embedding-management .sequence-list li.selected {
+      background-color: #dae0e5;
   }
-  
-  .admin-panel .selected-document pre {
-    white-space: pre-wrap; /* Preserve line breaks and spacing */
-    font-family: 'Courier New', Courier, monospace;
+
+  .file-embedding-management .sequence-details {
+      margin-top: 20px;
   }
-  
-  .admin-panel p {
-    margin: 10px 0;
+
+  .file-embedding-management .sequence-details strong {
+      display: block;
+      margin-top: 10px;
   }
-  
-  /* Style for loading and error messages */
-  .admin-panel .loading,
-  .admin-panel .error {
-    font-style: italic;
-    color: #777;
+
+  .file-embedding-management .sequence-details textarea {
+      width: 100%;
+      height: 200px;
+      margin-top: 10px;
+      font-family: 'Courier New', Courier, monospace;
+      resize: vertical;
   }
-  
-  .admin-panel .error {
-    color: #d9534f; /* Red color for errors */
-  }
-  
-  .admin-panel button.delete {
-    background-color: #dc3545; /* Red */
-  }
-  
-  .admin-panel button.delete:hover {
-    background-color: #c82333;
-  }
-  
-  .admin-panel button.make-admin {
-    background-color: #28a745; /* Green */
-  }
-  
-  .admin-panel button.make-admin:hover {
-    background-color: #218838;
-  }
-  
-  .admin-panel button.remove-admin {
-    background-color: #ffc107; /* Yellow */
-  }
-  
-  .admin-panel button.remove-admin:hover {
-    background-color: #e0a800;
+
+  .file-embedding-management .sequence-details button {
+      margin-top: 10px;
   }

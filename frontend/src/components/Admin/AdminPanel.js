@@ -4,7 +4,8 @@ import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserManagement } from './UserManagement';
 import { DocumentManagement } from './DocumentManagement';
-
+import { FileContentManagement } from './FileContentManagement';
+import { FileEmbeddingManagement } from './FileEmbeddingManagement';
 import '../../styles/adminPanel.css';
 
 
@@ -28,6 +29,8 @@ export const AdminPanel = () => {
                 <ul>
                     <li><Link to="/admin/users">User Management</Link></li>
                     <li><Link to="/admin/documents">Document Management</Link></li>
+                    <li><Link to="/admin/file_contents">File Content Management</Link></li>
+                    <li><Link to="/admin/file_embeddings">File Embedding Management</Link></li>
                     <li><button onClick={handleLogout}>Logout</button></li>
                     <li><button onClick={handleToMainPage}>Back to Main Page</button></li>
                 </ul>
@@ -36,6 +39,8 @@ export const AdminPanel = () => {
             <Routes>
                 <Route path="users" element={<UserManagement />} />
                 <Route path="documents" element={<DocumentManagement />} />
+                <Route path="file_contents" element={<FileContentManagement />} />
+                <Route path="file_embeddings" element={<FileEmbeddingManagement />} />
             </Routes>
         </div>
     );

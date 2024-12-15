@@ -1,4 +1,5 @@
 # src/app.py
+import base64
 from datetime import datetime
 import hashlib
 from flask import Flask, jsonify, request
@@ -15,7 +16,7 @@ import queue
 import config
 import os
 import tempfile
-from models import db, User, Document, DocumentReadAccess, FileContent
+from models import db, User, Document, DocumentReadAccess, FileContent, FileEmbedding, SequenceEmbedding
 from sqlalchemy import text
 from auth import Auth
 from werkzeug.utils import secure_filename
@@ -197,7 +198,7 @@ class FlaskApp:
                         'success': True,
                         'text_extracted': existing_website.text_content,
                         'message': 'Website already exists',
-                        'content_type': 'website',
+                        'content_type': 'file_content',
                     })
 
                 # Parse the website content
@@ -240,7 +241,7 @@ class FlaskApp:
                     'success': True,
                     'text_extracted': text,
                     'message': 'Website fetched and parsed successfully',
-                    'content_type': 'website',
+                    'content_type': 'file_content',
                 })
 
             except requests.exceptions.RequestException as e:
@@ -366,10 +367,11 @@ class FlaskApp:
 
             # Serialize the data to JSON
             content_data = [{
-                'id': item.id,
+                'file_id': item.id,
+                'filename': item.filepath,
                 'filepath': item.filepath,
                 'creation_date': item.creation_date.isoformat(),
-                'last_modified_date': item.last_modified
+                'last_modified_date': item.last_modified,
             } for item in content_items]
 
             return jsonify(content_data)
@@ -384,8 +386,9 @@ class FlaskApp:
                 return jsonify({'message': 'Content not found or access denied'}), 404
             
             content_data = {
-                'id': content_entry.id,
+                'file_id': content_entry.id,
                 'filepath': content_entry.filepath,
+                'filename': content_entry.filepath,
                 'creation_date': content_entry.creation_date.isoformat(),
                 'text_content': content_entry.text_content,
                 'size' : content_entry.size,
@@ -443,6 +446,41 @@ class FlaskApp:
                 })
 
             return jsonify(document_list)
+        
+        @self.app.route('/api/admin/file_contents', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_file_contents_list():
+            file_contents = FileContent.query.all()
+            file_content_list = []
+            for file_content in file_contents:
+                file_content_list.append({
+                    'id': file_content.id,
+                    'filepath': file_content.filepath,
+                    'size': file_content.size,
+                    'file_type': file_content.file_type,
+                    'last_modified': file_content.last_modified,
+                    'creation_date': file_content.creation_date,
+                    'text_content_hash': file_content.text_content_hash,
+                    'content_hash': file_content.content_hash,
+                    'user_id': file_content.user_id,
+                })
+
+            return jsonify(file_content_list)
+        
+        @self.app.route('/api/admin/file_embeddings', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_file_embeddings():
+            file_embeddings = FileEmbedding.query.all()
+            file_embedding_list = []
+            for file_embedding in file_embeddings:
+                file_embedding_list.append({
+                    'id': file_embedding.id,
+                    'document_id': file_embedding.document_id,
+                    'content_id': file_embedding.content_id,
+                    'creation_date': file_embedding.creation_date,
+                })
+
+            return jsonify(file_embedding_list)
            
         # DELETE a user
         @self.app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
@@ -489,6 +527,95 @@ class FlaskApp:
         def get_document(document_id):
             document = Document.query.get_or_404(document_id)
             return jsonify({'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content})
+
+        # Get a file content entry
+        @self.app.route('/api/admin/file_contents/<int:file_content_id>', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_file_content(file_content_id):
+            file_content = FileContent.query.get_or_404(file_content_id)
+            
+            return jsonify(
+                {
+                'id': file_content.id,
+                'filepath': file_content.filepath,
+                'size': file_content.size,
+                'file_type': file_content.file_type,
+                'last_modified': file_content.last_modified,
+                'creation_date': file_content.creation_date,
+                'text_content_hash': file_content.text_content_hash,
+                'content_hash': file_content.content_hash,
+                'text_content': file_content.text_content,
+                #'content': base64.b64decode(file_content.content),
+                'user_id': file_content.user_id,
+                })
+        
+        # delete a file content entry
+        @self.app.route('/api/admin/file_contents/<int:file_content_id>', methods=['DELETE'])
+        @Auth.rest_admin_auth_required
+        def delete_file_content(file_content_id):
+            file_content = FileContent.query.get_or_404(file_content_id)
+            db.session.delete(file_content)
+            db.session.commit()
+            return jsonify({'message': 'FileContent deleted'}), 200
+        
+        @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_file_embedding(file_embedding_id):
+            file_embedding = FileEmbedding.query.get_or_404(file_embedding_id)
+            sequence_embeddings = []
+            for sequence_embedding in file_embedding.sequences:
+                sequence_embeddings.append({
+                    'id': sequence_embedding.id,
+                    'sequence_hash': sequence_embedding.sequence_hash,
+                    'sequence_text': sequence_embedding.sequence_text,
+                    'embedding': sequence_embedding.embedding.tolist(),
+                })
+            
+            return jsonify({
+                'id': file_embedding.id,
+                'document_id': file_embedding.document_id,
+                'content_id': file_embedding.content_id,
+                'creation_date': file_embedding.creation_date,
+                'sequences': sequence_embeddings,
+            })
+
+        @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>', methods=['DELETE'])
+        @Auth.rest_admin_auth_required
+        def delete_file_embedding(file_embedding_id):
+            file_embedding = FileEmbedding.query.get_or_404(file_embedding_id)
+            db.session.delete(file_embedding)
+            db.session.commit()
+            return jsonify({'message': 'File embedding deleted'}), 200
+        
+        @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>/sequences', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_file_embedding_sequences(file_embedding_id):
+            file_embedding = FileEmbedding.query.get_or_404(file_embedding_id)
+            sequence_embeddings = []
+            for sequence_embedding in file_embedding.sequences:
+                sequence_embeddings.append({
+                    'id': sequence_embedding.id,
+                    'sequence_hash': sequence_embedding.sequence_hash,
+                    'sequence_text': sequence_embedding.sequence_text,
+                })
+
+            return jsonify(sequence_embeddings)
+
+        @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>/sequences/<int:sequence_embedding_id>', methods=['GET'])
+        @Auth.rest_admin_auth_required
+        def get_sequence_embedding(file_embedding_id, sequence_embedding_id):
+            sequence_embedding = SequenceEmbedding.query.get_or_404(sequence_embedding_id)
+
+            # Check if the sequence embedding belongs to the specified file embedding
+            if sequence_embedding.file_id != file_embedding_id:
+                return jsonify({'message': 'Sequence embedding not found for the specified file embedding'}), 404
+            
+            return jsonify({
+                'id': sequence_embedding.id,
+                'sequence_hash': sequence_embedding.sequence_hash,
+                'sequence_text': sequence_embedding.sequence_text,
+                'embedding': sequence_embedding.embedding
+            })
 
         @self.app.route('/health')
         def health_check():
