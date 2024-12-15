@@ -182,7 +182,17 @@ class EmbeddingManager:
         
         # Proceed with generating new embeddings
         sequences = EmbeddingManager._split_text(file_content.text_content)
-        sequence_hashes = [EmbeddingManager._calculate_hash(slice) for slice in sequences]
+        sequence_hashes = []
+        sequence_hash_set = set()
+        for i, sequence in enumerate(sequences):
+            sequence_hash = EmbeddingManager._calculate_hash(sequence)
+            if sequence_hash in sequence_hash_set:
+                logging.info(f"Skipping duplicate sequence: {sequence[:50]}... (hash: {sequence_hash})")
+                sequences.pop(i)
+                continue
+            sequence_hashes.append(sequence_hash)
+            sequence_hash_set.add(sequence_hash)
+
         logging.info(f"Calculated {len(sequence_hashes)} hashes for sequences")
 
         new_file_embedding = FileEmbedding(content=file_content)
