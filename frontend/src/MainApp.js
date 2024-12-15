@@ -7,6 +7,7 @@ import { StructurUpload } from './components/Sidebar/StructureUpload';
 import { ContentUpload } from './components/Sidebar/ContentUpload';
 import { ChatWindow } from './components/Chat/ChatWindow';
 import { DebugPanel } from './components/Debug/DebugPanel';
+import { SuggestedEdits } from './components/Chat/SuggestedEdits';
 import { useAuth } from './contexts/AuthContext';
 import 'react-quill/dist/quill.snow.css';
 
@@ -32,6 +33,7 @@ export const MainApp = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [cursorPositionBeforeSuggestion, setCursorPositionBeforeSuggestion] = useState(null);
     const [userTypedText, setUserTypedText] = useState('');
+    const [suggestedEdits, setSuggestedEdits] = useState([]);
     const lastRequestIdRef = useRef(null); // Use a ref to allow for latest updates without rerendering
     const debounceTimerRef = useRef(null);
     const pendingRequestRef = useRef(null);
@@ -75,6 +77,35 @@ export const MainApp = () => {
         handleTitleChange(newTitle);
     };
 
+    const handleAcceptEdit = useCallback((editId) => {
+        emit('client_apply_edit', {
+            documentId,
+            edit_id: editId,
+            accepted: true,
+        });
+    }, [documentId]);
+
+    const handleRejectEdit = useCallback((editId) => {
+        emit('client_apply_edit', {
+            documentId,
+            edit_id: editId,
+            accepted: false,
+        });
+    }, [documentId]);
+
+    const handleEditApplied = useCallback((event) => {
+        const { edit_id, status } = event;
+        // Remove the applied edit from the state
+        setSuggestedEdits(prevEdits => prevEdits.filter(edit => edit.id !== edit_id));
+
+        // Optionally, update the editor content or other UI elements based on the status
+        if (status === 'accepted') {
+            // Refresh or update the document content
+            // This might involve re-fetching the document or applying the changes locally if you're tracking them
+        }
+    }, []);
+
+
     const handleStructureParsed = useCallback((newContent) => {
         setEditorContent(newContent);
     }, []);
@@ -93,9 +124,11 @@ export const MainApp = () => {
 
     }, []);
 
-    const handleChatAnswer = useCallback((answer) => {
-        console.log('Received chat answer:', answer);
-        setChatMessages(prev => [...prev, { text: answer, sender: 'server' }]);
+    const handleChatAnswer = useCallback((data) => {
+        const { response, suggested_edits } = data;
+        console.log('Received chat answer:', response, suggested_edits);
+        setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
+        setSuggestedEdits(suggested_edits);
     }, []);
 
     const handleAutocompletion = useCallback((event) => {
@@ -291,6 +324,7 @@ export const MainApp = () => {
         server_autocompletion_suggestions: handleAutocompletion,
         server_document_title_generated: handleDocumentTitleGenerated,
         server_chat_answer: handleChatAnswer,
+        server_edit_applied: handleEditApplied,
         structure_parsed: handleStructureParsed,
         test: () => console.log("Test Event"),
     }), [handleDocumentCreated]); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
@@ -414,6 +448,11 @@ export const MainApp = () => {
                         }}
                     />
                 </div>
+                <SuggestedEdits
+                    suggestedEdits={suggestedEdits}
+                    onAcceptEdit={handleAcceptEdit}
+                    onRejectEdit={handleRejectEdit}
+                />
 
                 {process.env.REACT_APP_DEBUG && (
                     <DebugPanel 
