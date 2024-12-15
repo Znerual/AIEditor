@@ -257,3 +257,21 @@ class AutocompleteManager:
         except Exception as e:
             logging.error(f"Error getting suggestions: {str(e)}")
             return []
+        
+    def generate_title(self, text: str) -> Optional[str]:
+        """Generate a title for the given text using Gemini."""
+        logging.info(f"Generating title for text: {text[:50]}...")
+        if self.debug:
+            logging.info("Debug mode is on, returning a dummy title.")
+            return f"Debug Title for: {text[:20]}..."
+
+        try:
+            prompt = f"Generate a concise title for the following text:\n\n{text}\n\nTitle:"
+            response = self.model.generate_content(prompt)
+            title = response.text.strip()
+            logging.info(f"Title generated successfully: {title}")
+            return title
+        
+        except Exception as e:
+            logging.error(f"Error generating title: {e}")
+            return None
