@@ -80,6 +80,7 @@ class Document(db.Model):
     
     id = db.Column(db.String(36), primary_key=True, unique=True, nullable=False)
     title = db.Column(db.String(255), nullable=True)
+    title_manually_set = db.Column(db.Boolean, default=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.JSON, nullable=False, default={})
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
