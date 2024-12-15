@@ -1,13 +1,26 @@
+import { useState } from 'react';
 import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, 
     MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, 
     MenubarSubTrigger, MenubarTrigger } from '../ui/menubar';
 import { Button, buttonVariants } from '../ui/button';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Pencil } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import '../../styles/headerbarSection.css';
 
-export const Headerbar = ({ onToggleSidebar, sidebarOpen }) => {
+export const Headerbar = ({ 
+    onToggleSidebar, 
+    sidebarOpen,
+    title,
+    isEditingTitle,
+    onTitleChange,
+    onTitleEditCommit,
+    onStartTitleEdit
+}) => {
   const { user, logout } = useAuth();
+  const [localTitle, setLocalTitle] = useState(title);
     return (
         <div className="menubar-container">
             <div className="menubar-toggle">
@@ -19,6 +32,32 @@ export const Headerbar = ({ onToggleSidebar, sidebarOpen }) => {
                 >
                     {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
                 </Button>
+            </div>
+            <div className="document-title-label">
+            {isEditingTitle ? (
+                <div className="title-edit-group">
+                    <Input
+                        type="text"
+                        value={localTitle}
+                        onChange={(e) => setLocalTitle(e.target.value)}
+                        onBlur={onTitleEditCommit}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                onTitleEditCommit();
+                            }
+                        }}
+                        autoFocus
+                        className="title-edit-input"
+                    />
+                </div>
+            ) : (
+                <Label onClick={onStartTitleEdit} className="cursor-pointer">
+                    {title || 'Untitled Document'}
+                    <Button variant="ghost" size="icon" className="edit-title-button">
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                </Label>
+            )}
             </div>
             <Menubar className="menubar-content">
                 <MenubarMenu>
