@@ -27,7 +27,7 @@ export const AddContentModal = ({ isOpen, onClose, onAdd, token }) => {
 
   const handleAdd = useCallback(async (selectedContent) => {
     try {
-        const response = await fetch(`http://localhost:5000/api/content/${selectedContent.id}`, {
+        const response = await fetch(`http://localhost:5000/api/content/${selectedContent.file_id}`, {
             headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) {
@@ -48,7 +48,7 @@ export const AddContentModal = ({ isOpen, onClose, onAdd, token }) => {
           <h2>Select Content to Add</h2>
           <div className="modal-content-list">
             {content.map(item => (
-              <div key={item.id} className="modal-content-item" onClick={() => handleAdd(item)}>
+              <div key={item.file_id} className="modal-content-item" onClick={() => handleAdd(item)}>
                 <span>{item.filepath}</span>
                 <span className="modal-content-date">
                   {item.lastModified && new Date(item.lastModified).toLocaleString()}

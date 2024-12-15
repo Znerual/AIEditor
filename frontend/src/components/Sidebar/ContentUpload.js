@@ -50,8 +50,16 @@ export const ContentUpload = ({ title, onUpload }) => {
       // Filter selectedFiles to only include files that are selected
       const updatedFiles = selectedFiles.filter(file => selectedFileNames.includes(file.filename));
       
+      console.log("updatedFiles", updatedFiles);
+      const updatesFilesIdAndContent = updatedFiles.map(file => {
+        return {
+          file_id: file.file_id,
+          content_type: file.content_type,
+        }
+      });
+      console.log("updatesFilesIdAndContent", updatesFilesIdAndContent);
       
-      onUpload(updatedFiles);
+      onUpload(updatesFilesIdAndContent);
     }, [selectedFiles, fileSelections, onUpload]);
 
     const handleFilesChange = useCallback(async (filesOrEvent) => {
@@ -122,8 +130,6 @@ export const ContentUpload = ({ title, onUpload }) => {
             return newSelections;
           });
 
-          // // Update state with extracted content
-          // onUpload(uploadedFiles);
 
 
         } catch (err) {
@@ -200,10 +206,10 @@ export const ContentUpload = ({ title, onUpload }) => {
       console.log("Selected document:", document);
       setShowDocumentModal(false);
   
-      const id = document.id;
+      const id = document.file_id ;
       try {
           const text = await documentParser.readDocument(document);
-          const result = { filename: id, raw:document.content, document_id: id, success: true, text_extracted: text, message: 'Document extracted', content_type: 'document' };
+          const result = { filename: id, raw:document.content, file_id: document.id, success: true, text_extracted: text, message: 'Document extracted', content_type: 'document' };
           setSelectedFiles((prevFiles) => {
             return [...prevFiles, result];
           });
@@ -213,12 +219,12 @@ export const ContentUpload = ({ title, onUpload }) => {
           
             return newSelections;
           });
-          // onUpload(uploadedFiles);
+         
           
       } catch (error) {
           console.error("Error extracting text from Document", document.id, error);
       }
-    }, [onUpload]);
+    }, []);
 
 
     const handleAddWebsite = useCallback(async (url) =>  {
@@ -278,10 +284,12 @@ export const ContentUpload = ({ title, onUpload }) => {
     const handleAddContent = useCallback(async (content) => {
       // Handle the added content
       setShowAddContentModal(false);
+     
   
       try {
         // Assuming content is an array of file-like objects
         const newFile = {
+          file_id: content.file_id,
           filename: content.filepath,
           raw: {
             size: content.size,
@@ -291,6 +299,7 @@ export const ContentUpload = ({ title, onUpload }) => {
           success: true,
           text_extracted: content.text_content,
           message: 'Content added',
+          content_type: 'file_content',
         };
     
   
