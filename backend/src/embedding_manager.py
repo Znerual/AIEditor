@@ -14,29 +14,40 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 
 
 class EmbeddingManager:       
+
     @staticmethod
-    def _split_text(text: str, max_tokens: int = 2048) -> List[str]:
+    def _split_text(text: str, max_tokens: int = 2048, ideal_tokens: int = 512) -> List[str]:
         """
         Split text into smaller segments suitable for embedding while preserving sentence structure.
         
         Args:
             text (str): Input text to be split
-            max_tokens (int): Maximum number of tokens per sequence (default: 2048)
-                Note: This is a rough approximation using characters as a proxy for tokens
-                Assuming average English token is ~4 characters, we use max_chars = max_tokens * 4
+            max_tokens (int): Maximum number of tokens per sequence (hard limit)
+            ideal_tokens (int): Target number of tokens per sequence (soft limit)
+                The function will try to create sequences close to this length
+                while respecting sentence boundaries
         
         Returns:
             List[str]: List of text sequences
+        
+        Note:
+            - Uses character count as a proxy for token count (avg 4 chars per token)
+            - ideal_tokens should be less than max_tokens
+            - Sequences may be shorter or longer than ideal_tokens, but never exceed max_tokens
         """
-        # Approximate max characters based on token limit
+        if ideal_tokens > max_tokens:
+            raise ValueError("ideal_tokens must be less than or equal to max_tokens")
+        
+        # Approximate character limits based on token counts
         # Using 4 characters per token as a conservative estimate
         max_chars = max_tokens * 4
+        ideal_chars = ideal_tokens * 4
         
         # Split text into paragraphs first
         paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
         
         # Regular expression for splitting into sentences
-        # This handles common sentence endings (., !, ?) while avoiding common abbreviations
+        # This handles common sentence endings while avoiding common abbreviations
         sentence_pattern = r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s'
         
         sequences = []
@@ -50,14 +61,14 @@ class EmbeddingManager:
             for sentence in sentences:
                 sentence_length = len(sentence)
                 
-                # If a single sentence exceeds max length, split it by punctuation or space
+                # If a single sentence exceeds max length, split it by punctuation
                 if sentence_length > max_chars:
                     if current_sequence:
                         sequences.append(' '.join(current_sequence))
                         current_sequence = []
                         current_length = 0
                     
-                    # Split long sentence by other punctuation marks first
+                    # Split long sentence by other punctuation marks
                     subparts = re.split(r'[,;:](?=\s)', sentence)
                     
                     current_subpart = []
@@ -71,22 +82,31 @@ class EmbeddingManager:
                                 current_subpart_length = 0
                         
                         current_subpart.append(subpart)
-                        current_subpart_length += len(subpart) + 1  # +1 for space
+                        current_subpart_length += len(subpart) + 1
                     
                     if current_subpart:
                         sequences.append(' '.join(current_subpart))
                     
-                # Normal case: add sentence to current sequence if it fits
-                elif current_length + sentence_length + 1 <= max_chars:
-                    current_sequence.append(sentence)
-                    current_length += sentence_length + 1  # +1 for space
-                
-                # If adding this sentence would exceed max length, start a new sequence
                 else:
-                    if current_sequence:
-                        sequences.append(' '.join(current_sequence))
-                    current_sequence = [sentence]
-                    current_length = sentence_length
+                    # Check if adding this sentence would exceed the ideal length
+                    new_length = current_length + sentence_length + 1
+                    
+                    # Start a new sequence if:
+                    # 1. Current sequence is already near ideal length (within 90%)
+                    # 2. Adding new sentence would go significantly over ideal length
+                    # 3. Adding new sentence would exceed max length
+                    if (current_length >= ideal_chars * 0.9 or 
+                        new_length > ideal_chars * 1.1 or 
+                        new_length > max_chars):
+                        
+                        if current_sequence:
+                            sequences.append(' '.join(current_sequence))
+                            current_sequence = []
+                            current_length = 0
+                    
+                    # Add sentence to current sequence
+                    current_sequence.append(sentence)
+                    current_length = new_length
         
         # Add any remaining text
         if current_sequence:
@@ -100,7 +120,7 @@ class EmbeddingManager:
         sequence, hash_value = sequence_and_hash
         
         if debug:
-            logging.info(f"Generating random embedding for sequence: {sequence[:50]}... (hash: {hash_value})")
+            #logging.debug(f"Generating random embedding for sequence: {sequence[:50]}... (hash: {hash_value})")
             return np.random.rand(768).tolist(), hash_value
         
         logging.info(f"Generating embedding for sequence: {sequence[:50]}... (hash: {hash_value})")
@@ -197,8 +217,8 @@ class EmbeddingManager:
                     file=new_file_embedding
                 ) for (content_slice, slice_hash), (embedding, _) in zip(missing_sequences_with_hashes, embeddings_with_hashes)
             ]
-            total_sequences.extend(new_sequences)
             db.session.add_all(new_sequences)
+            total_sequences.extend(new_sequences)
         else:
             logging.info("No new sequences to embed, all sequences already exist")
 
@@ -288,12 +308,15 @@ class EmbeddingManager:
         sequence_hashes = [EmbeddingManager._calculate_hash(slice) for slice in sequences]
         logging.info(f"Calculated {len(sequence_hashes)} hashes for sequences")
 
+        # remove duplicate sequences from the list by analyzing the hash
+
+
         new_document_embedding = FileEmbedding(document=document)
         db.session.add(new_document_embedding)
         db.session.flush()
 
         total_sequences = []
-        missing_sequences_with_hashes = []
+        missing_sequences_with_hashes = set()
 
         for content_slice, slice_hash in zip(sequences, sequence_hashes):
             existing_sequence = SequenceEmbedding.query.filter_by(sequence_hash=slice_hash).first()
@@ -302,8 +325,10 @@ class EmbeddingManager:
                 total_sequences.append(existing_sequence)
             else:
                 logging.info(f"No existing sequence found for hash: {slice_hash}, adding to list for embedding generation")
-                missing_sequences_with_hashes.append((content_slice, slice_hash))
+                missing_sequences_with_hashes.add((content_slice, slice_hash))
 
+        missing_sequences_with_hashes = list(missing_sequences_with_hashes)
+        
         if missing_sequences_with_hashes:
             logging.info(f"Generating embeddings for {len(missing_sequences_with_hashes)} new sequences")
             with ThreadPoolExecutor() as executor:
@@ -311,6 +336,8 @@ class EmbeddingManager:
                     EmbeddingManager._get_single_embedding, 
                     missing_sequences_with_hashes
                 ))
+
+            logging.info(f"Generated {len(embeddings_with_hashes)} embeddings")
 
             new_sequences = [
                 SequenceEmbedding(
@@ -320,8 +347,8 @@ class EmbeddingManager:
                     file=new_document_embedding
                 ) for (content_slice, slice_hash), (embedding, _) in zip(missing_sequences_with_hashes, embeddings_with_hashes)
             ]
-            total_sequences.extend(new_sequences)
             db.session.add_all(new_sequences)
+            total_sequences.extend(new_sequences)
         else:
             logging.info("No new sequences to embed, all sequences already exist")
 
@@ -365,7 +392,7 @@ class EmbeddingManager:
                 logging.warning("No embeddings provided for similarity search")
                 return []
 
-            query_embedding, _ = EmbeddingManager._get_single_embedding((text, None), debug=True)
+            query_embedding, _ = EmbeddingManager._get_single_embedding((text, EmbeddingManager._calculate_hash(text)), debug=True)
             
             similar_sequences = (
                 SequenceEmbedding.query
