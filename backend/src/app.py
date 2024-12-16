@@ -2,6 +2,7 @@
 import base64
 from datetime import datetime
 import hashlib
+import uuid
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -14,13 +15,15 @@ import logging
 import textract
 import queue
 import config
+from delta import Delta
 import os
 import tempfile
-from models import db, User, Document, DocumentReadAccess, FileContent, FileEmbedding, SequenceEmbedding
+from models import db, User, Document, DocumentReadAccess, DocumentEditAccess, FileContent, FileEmbedding, SequenceEmbedding
 from sqlalchemy import text
 from auth import Auth
 from werkzeug.utils import secure_filename
 from bs4 import BeautifulSoup
+from sqlalchemy.exc import IntegrityError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -137,6 +140,36 @@ class FlaskApp:
                 'user': {'id': existing_user.id, 'email': existing_user.email, 'isAdmin': existing_user.is_admin}
             })
         
+        @self.app.route('/api/user/create_new_document', methods=['POST'])
+        @Auth.rest_auth_required
+        def handle_client_create_new_document(user_id):
+            try:
+                # Generate a unique document ID and ensure it doesn't already exist
+                while True:
+                    document_id = str(uuid.uuid4())
+                    if not Document.query.filter_by(id=document_id).first():
+                        break
+
+                # Create a new document for the user
+                new_document = Document(id=document_id, user_id=user_id)
+                new_document.apply_delta(Delta([{'insert' : 'Hallo das ist ein Testdokument'}]))
+                db.session.add(new_document)
+                db.session.commit()
+
+
+                return jsonify({
+                    'documentId': document_id
+                })
+            
+            except IntegrityError as e:
+                db.session.rollback()
+                print("Database integrity error while creating document ", e)
+                return jsonify({'message': 'Database integrity error'}), 500
+
+            except Exception as e:
+                print(f"Authentication or room joining error: {e}")
+                return jsonify({'message': str(e)}), 500
+        
         @self.app.route('/api/user/read_documents', methods=['GET'])
         @Auth.rest_auth_required
         def get_user_documents(user_id):
@@ -153,6 +186,27 @@ class FlaskApp:
                 all_readable_documents.append(read_access_entry.document)
             
             return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
+
+        @self.app.route('/api/user/documents', methods=['GET'])
+        @Auth.rest_auth_required
+        def get_user_all_documents(user_id):
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+            
+            documents = Document.query.filter_by(user_id=user_id).all()
+
+            # find all documents to which the user has read access
+            read_access_entries = DocumentReadAccess.query.filter_by(user_id=user_id).all()
+            edit_access_entries = DocumentEditAccess.query.filter_by(user_id=user_id).all()
+
+            all_usable_documents = [*documents]
+            for read_access_entry in read_access_entries:
+                all_usable_documents.append(read_access_entry.document)
+
+            for edit_access_entry in edit_access_entries:
+                all_usable_documents.append(edit_access_entry.document)
+            
+            return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_usable_documents])
 
         @self.app.route('/api/fetch-website', methods=['GET'])
         @Auth.rest_auth_required
