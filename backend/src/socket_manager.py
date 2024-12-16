@@ -229,7 +229,7 @@ class SocketManager:
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_chat_event(user_id, msg):
             document_id = session.get('document_id')  # Get document_id from session
-            response_data = self._dialog_manager.get_response(user_id, msg, document_id, self.current_content_selection)
+            response_data = self._dialog_manager.get_response(user_id, msg['text'], document_id, self.current_content_selection)
 
             # Emit response and suggested edits
             self.emit_event(WebSocketEvent("server_chat_answer", {
