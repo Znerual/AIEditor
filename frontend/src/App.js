@@ -5,7 +5,8 @@ import { MainApp } from './MainApp';
 import { AuthForm } from './components/Login/AuthForm';
 import { useAuth } from './contexts/AuthContext';
 import { AdminPanel } from './components/Admin/AdminPanel';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'; // Import routing 
+import { Editor } from './components/Editor/Editor';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom'; // Import routing 
 
 // A wrapper for <Route> that redirects to the login
 // screen if you're not yet authenticated.
@@ -27,8 +28,13 @@ function PrivateRoute({ children, adminRequired = false }) {
   );
 }
 
+const EditorWrapper = () => {
+  const { documentId } = useParams();
+  return <Editor documentId={documentId} />;
+};
 
 const AppContent = () => {
+  
   return (
     <Routes>
       <Route path="/login" element={<AuthForm />} />
@@ -40,6 +46,14 @@ const AppContent = () => {
           </PrivateRoute>
         }
       />
+      <Route
+            path="/editor/:documentId"
+            element={
+                <PrivateRoute>
+                <EditorWrapper />
+                </PrivateRoute>
+            }
+        />
       <Route
         path="/"
         element={
