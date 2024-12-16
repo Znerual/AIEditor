@@ -119,49 +119,52 @@ export const MainApp = () => {
         const quill = quillRef.current.getEditor();
         let range = quill.getSelection();
         let insertIndex = range ? range.index : 0; // Default to 0 if no selection
-
+        const currentLength = quill.getText().length;
+        
         if (suggested_edits && suggested_edits.length > 0) {
             suggested_edits.forEach(edit => {
             console.log('[handleChatAnswer] Processing edit:', edit);
             if (edit.name === 'insert_text') {
+                const position = Math.min(edit.arguments.position, currentLength);
                 const insertData = {
                 id: edit.name, // Or a unique ID from the backend
                 type: 'insert',
                 text: edit.arguments.text,
-                position: edit.arguments.position
+                position: position
                 };
                 console.log('[handleChatAnswer] Inserting suggestion with data:', insertData);
             
                 // Insert a placeholder for the suggestion
-                console.log('[handleChatAnswer] Inserting suggestion embed');
-                quill.insertText(insertData.position, "*", 'api');
-                quill.insertEmbed(insertData.position, 'suggestion', insertData, 'api');
-
-                // Log the DOM after insertion
-                console.log('[handleChatAnswer] DOM after insertion:', 
-                    quill.root.querySelector('.suggestion-debug'));
+                quill.insertText(insertData.position, "*", 'suggestion', insertData);
+               
             } else if (edit.name === 'delete_text') {
+                const start = Math.min(edit.arguments.start, currentLength);
+                const end = Math.min(edit.arguments.end, currentLength);
                 const deleteData = {
                 id: edit.name, // Unique ID for the suggestion
                 type: 'delete',
-                start: edit.arguments.start,
-                end: edit.arguments.end
+                start: start,
+                end: end
                 };
-                quill.insertText(deleteData.start, "*", 'api');
-                quill.insertEmbed(deleteData.start, 'suggestion', deleteData, 'api');
+                const suggestionTextROI = quill.getText(start, end - start);
+                quill.deleteText(start, end - start, 'api');
+                quill.insertText(start, suggestionTextROI, 'suggestion', deleteData);
                 
             } else if (edit.name === 'replace_text') {
+                const start = Math.min(edit.arguments.start, currentLength);
+                const end = Math.min(edit.arguments.end, currentLength);
                 const replaceData = {
                 id: edit.name, // Unique ID for the suggestion
                 type: 'replace',
-                start: edit.arguments.start,
-                end: edit.arguments.end,
+                start: start,
+                end: end,
                 text: edit.arguments.new_text
                 };
                
-                quill.insertText(replaceData.start, "*", 'api');
-                quill.insertEmbed(replaceData.start, 'suggestion', replaceData, 'api');
- 
+                const suggestionTextROI = quill.getText(start, end - start);
+                quill.deleteText(start, end - start, 'api');
+                quill.insertText(start, suggestionTextROI, 'suggestion', replaceData);
+               
             }
             });
         }
@@ -438,70 +441,60 @@ export const MainApp = () => {
 
     // Custom Event Handlers (in MainApp)
     const handleAcceptSuggestion = useCallback((event) => {
-        const { suggestionId, suggestionType, text, original, start, end } = event.detail;
-        const quill = quillRef.current.getEditor();
-
-        console.log("Accepting suggestion ", suggestionId, suggestionType, text, original, start, end);
-
-        // Find the suggestion blot by its ID
-        const blot = quill.scroll.find(event.target);
-
-        if (!blot) {
-            console.error('Suggestion blot not found!');
+        const data = event.detail;
+        if (!data) {
+            console.error('Accept suggestion event data is missing');
             return;
         }
+        const quill = quillRef.current.getEditor();
 
-        // Calculate the range based on the blot's position
-        const blotIndex = quill.getIndex(blot);
-        const blotLength = blot.length();
-        const range = { index: blotIndex - 1, length: blotLength + 2 };
-
-        if (suggestionType === 'insert') {
-            quill.deleteText(range.index, range.length);
-            quill.insertText(range.index, text);
-        } else if (suggestionType === 'delete') {
-            quill.deleteText(range.index, range.length);
-            quill.deleteText(start, end - start);
-        } else if (suggestionType === 'replace') {
-            quill.deleteText(range.index, range.length);
-            quill.deleteText(start, end - start);
-            quill.insertText(start, text);
+        if (data.type === 'insert') {
+            quill.deleteText(data.position, 1, 'silent');
+            quill.insertText(data.position, data.text, 'silent');
+        } else if (data.type === 'delete') {
+            quill.deleteText(data.start, data.end - data.start, 'silent');
+        } else if (data.type === 'replace') {
+            quill.deleteText(data.start, data.end - data.start, 'silent');
+            quill.insertText(data.start, data.text, 'silent');
+        } else {
+            console.error('Invalid suggestion type:', data.type);
         }
 
         // Emit event to backend
         emit('client_apply_edit', {
             documentId,
-            edit_id: suggestionId,
+            edit_id: data.id,
             accepted: true,
         });
     }, [documentId, emit]);
 
     const handleRejectSuggestion = useCallback((event) => {
-        const { suggestionId } = event.detail;
-        const quill = quillRef.current.getEditor();
-
-        console.log("Rejecting suggestion ", suggestionId);
-
-        // Find the suggestion blot by its ID
-        const blot = quill.scroll.find(event.target);
-        
-        if (!blot) {
-            console.error('Suggestion blot not found!');
+        const data = event.detail;
+        if (!data) {
+            console.error('Reject suggestion event data is missing');
             return;
         }
+        const quill = quillRef.current.getEditor();
 
-        // Calculate the range based on the blot's position
-        const blotIndex = quill.getIndex(blot);
-        const blotLength = blot.length();
-        const range = { index: blotIndex - 1, length: blotLength + 2 };
+        console.log("Rejecting suggestion ", data.id);
+        console.log("With data ", event);
+        if (data.type === 'insert') {
+            quill.deleteText(data.position, 1, 'silent');
+        } else if (data.type === 'delete') {
+            const suggestionTextROI = quill.getText(data.start, data.end - data.start);
+            quill.deleteText(data.start, data.end - data.start, 'silent');
+            quill.insertText(data.start, suggestionTextROI, 'silent');
+        } else if (data.type === 'replace') {
+            const suggestionTextROI = quill.getText(data.start, data.end - data.start);
+            quill.deleteText(data.start, data.end - data.start, 'silent');
+            quill.insertText(data.start, data.text, suggestionTextROI, 'silent');
+        } else {
+            console.error('Invalid suggestion type:', data.type);
+        }
         
-        // Remove the suggestion
-        quill.deleteText(range.index, range.length);
-
-        // Emit event to backend
         emit('client_apply_edit', {
             documentId,
-            edit_id: suggestionId,
+            edit_id: data.id,
             accepted: false,
         });
     }, [documentId, emit]);
