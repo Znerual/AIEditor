@@ -5,7 +5,6 @@
     height: 100vh;
     background-color: white;
     font-family: 'Arial', sans-serif;
-    padding: 20px;
 }
 
 .main-header {
@@ -13,12 +12,17 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
+    width: 100%;
+    padding: 0 20px;
+    box-sizing: border-box;
 }
 
 .container {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
+    width: 100%; /* Make the container take the full width */
+    max-width: 100%; /* Remove any max-width limitations */
+    margin: 0; /* Remove default margins */
+    padding: 20px; /* Add padding to the container */
+    box-sizing: border-box; /* Include padding in the container's width */
 }
 
 .search-input {
@@ -26,13 +30,16 @@
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 16px;
-    width: 300px;
+    flex-grow: 1;
+    margin-left: 20px;
 }
 
 .document-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 20px;
+    width: 100%; /* Ensure the grid takes up the full width of its container */
+    box-sizing: border-box;
 }
 
 .document-card {
