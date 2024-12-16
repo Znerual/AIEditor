@@ -1,15 +1,14 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
-import './styles/mainApp.css';
+import './styles/mainApp.css'; // Make sure to create this CSS file
 
 export const MainApp = () => {
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const { user, logout, token } = useAuth();
+    const { token } = useAuth();
     const navigate = useNavigate();
 
     const handleDocumentSelect = useCallback((documentId) => {
@@ -64,38 +63,44 @@ export const MainApp = () => {
 
     return (
         <div className="app-container">
+            <div className="main-header">
+                <button onClick={handleCreateNewDocument} className="create-new-document-button">Create New Document</button>
+                <input
+                    type="text"
+                    placeholder="Search by document title, id or creation date..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="search-input"
+                />
+            </div>
             <div className='container'>
                 <h1>Your Documents</h1>
-                {loading && <p>Loading documents...</p>}
-                {error && <p>Error: {error}</p>}
+                {loading && <p className="loading">Loading documents...</p>}
+                {error && <p className="error">Error: {error}</p>}
                 {!loading && !error && (
-                    <>
-                        <input
-                            type="text"
-                            placeholder="Search by document title, id or creation date..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="search-input"
-                        />
-                        <div className="document-list">
-                            {filteredDocuments.map(doc => (
-                                <div key={doc.id} className="document-item" onClick={() => handleDocumentSelect(doc.id)}>
+                    <div className="document-grid">
+                        {filteredDocuments.map(doc => (
+                            <div key={doc.id} className="document-card" onClick={() => handleDocumentSelect(doc.id)}>
+                                <div className="document-preview">
+                                    {/* Placeholder for document preview image */}
+                                    <div className="preview-image"></div>
+                                </div>
+                                <div className="document-info">
                                     <h2>{doc.title}</h2>
                                     <p>ID: {doc.id}</p>
-                                    <p>Created At: {new Date(doc.created_at).toLocaleString()}</p>
-                                    <p>Last Modified: {new Date(doc.updated_at).toLocaleString()}</p>
+                                    <p>Created: {new Date(doc.created_at).toLocaleString()}</p>
+                                    <p>Modified: {new Date(doc.updated_at).toLocaleString()}</p>
                                     <p>User ID: {doc.user_id}</p>
                                     <div className='document-collaborators'>
-                                        <p>Colaborators:</p>
+                                        <p>Collaborators:</p>
                                         <div className='collaborators-list'>
                                             {/* Map over collaborators when available */}
                                         </div>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                        <button onClick={handleCreateNewDocument} className="create-new-document-button">Create New Document</button>
-                    </>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
         </div>
