@@ -10,7 +10,7 @@ from auth import Auth
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 from models import Document, db
-from sqlalchemy.exc import IntegrityError
+
 from delta import Delta
 import uuid
 from utils import delta_to_string
@@ -64,42 +64,8 @@ class SocketManager:
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_authenticates(user_id, data): 
             print("Client tries to authenticate")
-            try:
-                # Generate a unique document ID and ensure it doesn't already exist
-                while True:
-                    document_id = str(uuid.uuid4())
-                    if not Document.query.filter_by(id=document_id).first():
-                        break
+            print(f'Client authenticated: user_id={user_id}')
 
-                # Create a new document for the user
-                new_document = Document(id=document_id, user_id=user_id)
-                new_document.apply_delta(Delta([{'insert' : 'Hallo das ist ein Testdokument'}]))
-                db.session.add(new_document)
-                db.session.commit()
-
-                # Store the document ID in the session for this client
-                session['document_id'] = document_id
-
-                # Join the room specific to the document ID
-                join_room(document_id)
-
-                print(f'Client authenticated: user_id={user_id}, document_id={document_id}')
-
-                # Send the document ID to the newly connected client
-                self.emit_event(WebSocketEvent('server_document_created', {'documentId': document_id}))
-
-                return True # Return True to acknowledge successful authentication
-            
-            except IntegrityError as e:
-                db.session.rollback()
-                print("Database integrity error while creating document ", e)
-                self.emit_event(WebSocketEvent('authentication_failed', {'message': 'Database integrity error'}))
-                return False
-
-            except Exception as e:
-                print(f"Authentication or room joining error: {e}")
-                self.emit_event(WebSocketEvent('authentication_failed', {'message': str(e)}))  # Emit an error event
-                return False # Return False to indicate authentication failure
            
         @self._socketio.on('client_get_document')
         @Auth.socket_auth_required(emit_event=self.emit_event)
@@ -111,6 +77,12 @@ class SocketManager:
                     print(data)
                     raise ValueError("Missing documentId field in handle_get_document")
                 
+                # Store the document ID in the session for this client
+                session['document_id'] = document_id
+
+                # Join the room specific to the document ID
+                join_room(document_id)
+
                 content = DocumentManager.get_document_content(document_id, user_id)
                 self._socketio.emit('server_sent_document_content', {
                     'documentId': document_id,
