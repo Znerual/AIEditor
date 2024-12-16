@@ -83,11 +83,17 @@ class SocketManager:
                 # Join the room specific to the document ID
                 join_room(document_id)
 
-                content = DocumentManager.get_document_content(document_id, user_id)
-                self._socketio.emit('server_sent_document_content', {
+                document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+                if not document:
+                    self.emit_event(WebSocketEvent('server_error', {'message': f"Document not found: {document_id}"}))
+                    return
+                
+                content = DocumentManager.get_document_content(document)
+                self.emit_event(WebSocketEvent('server_sent_document_content', {
                     'documentId': document_id,
+                    'title': document.title,
                     'content': content.ops
-                })
+                }))
                 
             except Exception as e:
                 print(f"Error getting document: {str(e)}")
@@ -146,8 +152,11 @@ class SocketManager:
                         'requestId': request_id
                     }))
 
+                print(f"Title Mnaually set: {document.title_manually_set}, len content string: {len(content_str)}")
+
                 # Generate a title for the document
                 if not document.title_manually_set and len(content_str) > Config.TITLE_DOCUMENT_LENGTH_THRESHOLD:
+                    print("Generating title")
                     title = self._autocomplete_manager.generate_title(content_str)
                     if title:
                         document.title = title
