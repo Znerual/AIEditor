@@ -152,7 +152,7 @@ class SocketManager:
                 if not all([document_id, request_id]):
                     raise ValueError("Missing required fields documentId and requestId in handle_text_change")
                 
-                document = Document.get(document_id)
+                document = Document.query.get(document_id)
                 if not document:
                     raise ValueError("Document not found")
                 
