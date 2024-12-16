@@ -1,13 +1,13 @@
 // src/App.js
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
+import SuggestionBlot from './components/Editor/SuggestionBlot';
 import { useWebSocket } from './hooks/useWebSocket';
 import { Headerbar } from './components/Headerbar/Headerbar';
 import { StructurUpload } from './components/Sidebar/StructureUpload';
 import { ContentUpload } from './components/Sidebar/ContentUpload';
 import { ChatWindow } from './components/Chat/ChatWindow';
 import { DebugPanel } from './components/Debug/DebugPanel';
-import { SuggestedEdits } from './components/Chat/SuggestedEdits';
 import { useAuth } from './contexts/AuthContext';
 import 'react-quill/dist/quill.snow.css';
 
@@ -17,6 +17,7 @@ import './styles/components.css';
 import './styles/globals.css'; 
 
 // const Delta = Quill.import('delta');
+Quill.register(SuggestionBlot);
 
 export const MainApp = () => {
     // State management
@@ -77,22 +78,6 @@ export const MainApp = () => {
         handleTitleChange(newTitle);
     };
 
-    const handleAcceptEdit = useCallback((editId) => {
-        emit('client_apply_edit', {
-            documentId,
-            edit_id: editId,
-            accepted: true,
-        });
-    }, [documentId]);
-
-    const handleRejectEdit = useCallback((editId) => {
-        emit('client_apply_edit', {
-            documentId,
-            edit_id: editId,
-            accepted: false,
-        });
-    }, [documentId]);
-
     const handleEditApplied = useCallback((event) => {
         const { edit_id, status } = event;
         // Remove the applied edit from the state
@@ -128,7 +113,53 @@ export const MainApp = () => {
         const { response, suggested_edits } = data;
         console.log('Received chat answer:', response, suggested_edits);
         setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
-        setSuggestedEdits(suggested_edits);
+        setSuggestedEdits(suggested_edits); // Assuming you still want to store them in state
+
+        const quill = quillRef.current.getEditor();
+        let range = quill.getSelection();
+        let insertIndex = range ? range.index : 0; // Default to 0 if no selection
+
+        if (suggested_edits && suggested_edits.length > 0) {
+            suggested_edits.forEach(edit => {
+            if (edit.name === 'insert_text') {
+                const insertData = {
+                id: edit.name, // Or a unique ID from the backend
+                type: 'insert',
+                text: edit.arguments.text,
+                position: edit.arguments.position
+                };
+        
+                // Insert a placeholder for the suggestion
+                quill.insertText(insertData.position, "[", 'api');
+                quill.insertEmbed(insertData.position + 1, 'suggestion', insertData, 'api');
+                quill.insertText(insertData.position + 2, "]", 'api');
+                quill.setSelection(insertData.position + 3, 0)
+            } else if (edit.name === 'delete_text') {
+                const deleteData = {
+                id: edit.name, // Unique ID for the suggestion
+                type: 'delete',
+                start: edit.arguments.start,
+                end: edit.arguments.end
+                };
+                quill.insertText(deleteData.start, "[", 'api');
+                quill.insertEmbed(deleteData.start + 1, 'suggestion', deleteData, 'api');
+                quill.insertText(deleteData.end + 1, "]", 'api');
+                quill.setSelection(deleteData.end + 2, 0)
+            } else if (edit.name === 'replace_text') {
+                const replaceData = {
+                id: edit.name, // Unique ID for the suggestion
+                type: 'replace',
+                start: edit.arguments.start,
+                end: edit.arguments.end,
+                text: edit.arguments.new_text
+                };
+                quill.insertText(replaceData.start, "[", 'api');
+                quill.insertEmbed(replaceData.start + 1, 'suggestion', replaceData, 'api');
+                quill.insertText(replaceData.end + 1, "]", 'api');
+                quill.setSelection(replaceData.end + 2, 0)
+            }
+            });
+        }
     }, []);
 
     const handleAutocompletion = useCallback((event) => {
@@ -398,7 +429,97 @@ export const MainApp = () => {
         }
     }, [documentId, emit]);
 
+    // Suggestion Logic
 
+    // Custom Event Handlers (in MainApp)
+    const handleAcceptSuggestion = useCallback((event) => {
+        const { suggestionId, suggestionType, text, original, start, end } = event.detail;
+        const quill = quillRef.current.getEditor();
+
+        // Find the suggestion blot by its ID
+        const blot = quill.scroll.find(event.target);
+
+        if (!blot) {
+            console.error('Suggestion blot not found!');
+            return;
+        }
+
+        // Calculate the range based on the blot's position
+        const blotIndex = quill.getIndex(blot);
+        const blotLength = blot.length();
+        const range = { index: blotIndex - 1, length: blotLength + 2 };
+
+        if (suggestionType === 'insert') {
+            quill.deleteText(range.index, range.length);
+            quill.insertText(range.index, text);
+        } else if (suggestionType === 'delete') {
+            quill.deleteText(range.index, range.length);
+            quill.deleteText(start, end - start);
+        } else if (suggestionType === 'replace') {
+            quill.deleteText(range.index, range.length);
+            quill.deleteText(start, end - start);
+            quill.insertText(start, text);
+        }
+
+        // Emit event to backend
+        emit('client_apply_edit', {
+            documentId,
+            edit_id: suggestionId,
+            accepted: true,
+        });
+    }, [documentId, emit]);
+
+    const handleRejectSuggestion = useCallback((event) => {
+        const { suggestionId } = event.detail;
+        const quill = quillRef.current.getEditor();
+
+        // Find the suggestion blot by its ID
+        const blot = quill.scroll.find(event.target);
+        
+        if (!blot) {
+            console.error('Suggestion blot not found!');
+            return;
+        }
+
+        // Calculate the range based on the blot's position
+        const blotIndex = quill.getIndex(blot);
+        const blotLength = blot.length();
+        const range = { index: blotIndex - 1, length: blotLength + 2 };
+        
+        // Remove the suggestion
+        quill.deleteText(range.index, range.length);
+
+        // Emit event to backend
+        emit('client_apply_edit', {
+            documentId,
+            edit_id: suggestionId,
+            accepted: false,
+        });
+    }, [documentId, emit]);
+
+    const modules = useMemo(() => ({
+        toolbar: [
+            [{ header: [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            [{ color: [] }, { background: [] }],
+            ['clean']
+        ],
+    }), []);
+
+    useEffect(() => {
+        const quill = quillRef.current.getEditor();
+
+        // Attach custom event listeners to the Quill editor
+        quill.root.addEventListener('accept-suggestion', handleAcceptSuggestion);
+        quill.root.addEventListener('reject-suggestion', handleRejectSuggestion);
+
+        return () => {
+            // Clean up event listeners when the component unmounts
+            quill.root.removeEventListener('accept-suggestion', handleAcceptSuggestion);
+            quill.root.removeEventListener('reject-suggestion', handleRejectSuggestion);
+        };
+    }, [handleAcceptSuggestion, handleRejectSuggestion]);
 
     return (
         <div className="app-container">
@@ -437,22 +558,9 @@ export const MainApp = () => {
                         value={editorContent}
                         onChange={handleEditorChange}
                         //onChangeSelection={handleEditorSelectionChange}
-                        modules={{
-                            toolbar: [
-                                [{ header: [1, 2, 3, false] }],
-                                ['bold', 'italic', 'underline', 'strike'],
-                                [{ list: 'ordered' }, { list: 'bullet' }],
-                                [{ color: [] }, { background: [] }],
-                                ['clean']
-                            ]
-                        }}
+                        modules={modules}
                     />
                 </div>
-                <SuggestedEdits
-                    suggestedEdits={suggestedEdits}
-                    onAcceptEdit={handleAcceptEdit}
-                    onRejectEdit={handleRejectEdit}
-                />
 
                 {process.env.REACT_APP_DEBUG && (
                     <DebugPanel 

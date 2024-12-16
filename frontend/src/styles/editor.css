@@ -1,0 +1,42 @@
+/* frontend/src/styles/components.css (or your chosen CSS file) */
+.ql-editor .suggestion {
+    background-color: #e0f0ff; /* Light blue background */
+    border: 1px solid #a0c0e0; /* Light blue border */
+    padding: 2px 5px;
+    margin: 0 2px;
+    border-radius: 3px;
+    cursor: pointer; /* Make it clear it's interactive */
+}
+
+.ql-editor .suggestion:hover {
+    background-color: #cce0ff; /* Slightly darker on hover */
+}
+
+.suggestion-tooltip {
+  position: absolute;
+  background-color: #444;
+  color: white;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-family: sans-serif;
+  font-size: 14px;
+  display: flex;
+  gap: 10px;
+  z-index: 10; /* Ensure it's above other elements */
+}
+
+.suggestion-tooltip button {
+  border: none;
+  border-radius: 3px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: white;
+}
+
+.suggestion-tooltip button:first-child { /* Accept button */
+  background-color: green;
+}
+
+.suggestion-tooltip button:last-child { /* Reject button */
+  background-color: red;
+}
