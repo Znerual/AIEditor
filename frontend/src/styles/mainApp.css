@@ -1,72 +1,101 @@
-/* frontend/src/styles/MainApp.css */
-
+/* frontend/src/styles/mainApp.css */
 .app-container {
     display: flex;
     flex-direction: column;
     height: 100vh;
     background-color: white;
-    font-family: 'Arial', sans-serif; /* Choose your desired font */
-  }
-  
-  .container {
-    width: 80%;
-    max-width: 800px;
-    margin: 0 auto;
+    font-family: 'Arial', sans-serif;
     padding: 20px;
-  }
-  
-  .search-input {
-    width: 100%;
-    padding: 10px;
+}
+
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 20px;
+}
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.search-input {
+    padding: 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 16px;
-  }
-  
-  .document-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  
-  .document-item {
+    width: 300px;
+}
+
+.document-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.document-card {
     border: 1px solid #ccc;
-    padding: 15px;
     border-radius: 5px;
     background-color: #f8f8f8;
     cursor: pointer;
-    transition: background-color 0.2s ease-in-out;
-  }
-  
-  .document-item:hover {
-    background-color: #f0f0f0;
-  }
-  
-  .document-item h2 {
+    transition: box-shadow 0.2s ease-in-out;
+    display: flex;
+    flex-direction: column;
+    height: 350px;
+}
+
+.document-card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.document-preview {
+    flex: 1;
+    background-color: #e0e0e0;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    overflow: hidden;
+}
+
+.preview-image {
+    /* Placeholder for document preview - replace with actual preview logic */
+    width: 80%;
+    height: 80%;
+    background-color: #d0d0d0;
+}
+
+.document-info {
+    padding: 15px;
+}
+
+.document-item h2 {
     margin-top: 0;
     margin-bottom: 5px;
     font-size: 1.2rem;
-  }
-  
-  .document-item p {
+}
+
+.document-item p {
     margin: 5px 0;
     font-size: 0.9rem;
     color: #555;
-  }
-  
-  .document-collaborators {
+}
+
+.document-collaborators {
     margin-top: 10px;
-  }
-  
-  .collaborators-list {
+}
+
+.collaborators-list {
     margin-top: 5px;
     font-size: 0.8rem;
     color: #777;
-  }
-  
-  .create-new-document-button {
-    background-color: #007bff; /* Example button color */
+}
+
+.create-new-document-button {
+    background-color: #007bff;
     color: white;
     border: none;
     padding: 10px 20px;
@@ -74,11 +103,18 @@
     font-size: 16px;
     cursor: pointer;
     transition: background-color 0.2s ease-in-out;
-    margin-top: 20px;
-  }
-  
-  .create-new-document-button:hover {
+}
+
+.create-new-document-button:hover {
     background-color: #0056b3;
-  }
-  
-  /* Add more styles as needed for other elements */
+}
+
+.loading,
+.error {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.error {
+    color: red;
+}
