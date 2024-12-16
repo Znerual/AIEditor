@@ -206,7 +206,7 @@ class FlaskApp:
             for edit_access_entry in edit_access_entries:
                 all_usable_documents.append(edit_access_entry.document)
             
-            return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_usable_documents])
+            return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'updated_at': document.updated_at, 'content': document.content} for document in all_usable_documents])
 
         @self.app.route('/api/fetch-website', methods=['GET'])
         @Auth.rest_auth_required
@@ -501,6 +501,7 @@ class FlaskApp:
                     'title_manually_set': doc.title_manually_set,
                     'user_id': doc.user_id,
                     'created_at': doc.created_at,
+                    'last_modified': doc.updated_at,
                     'size_kb': size_in_kb,
                     'edit_access_entries': edit_access_users,
                     'read_access_entries': read_access_users
