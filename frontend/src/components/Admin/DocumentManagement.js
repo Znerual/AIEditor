@@ -85,6 +85,7 @@ export const DocumentManagement = () => {
                                 <th>Title</th>
                                 <th>User ID</th>
                                 <th>Created At</th>
+                                <th>Last Modified</th>
                                 <th>Size (KB)</th>
                                 <th>Read Access</th>
                                 <th>Edit Access</th>
@@ -102,6 +103,7 @@ export const DocumentManagement = () => {
                                     <td>{doc.title}</td>
                                     <td>{doc.user_id}</td>
                                     <td>{new Date(doc.created_at).toLocaleString()}</td>
+                                    <td>{new Date(doc.last_modified).toLocaleString()}</td>
                                     <td>{doc.size_kb}</td>
                                     <td>
                                         <ul>
