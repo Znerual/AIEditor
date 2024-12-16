@@ -385,6 +385,7 @@ export const MainApp = () => {
             const range = editor.getSelection();
             if (range) {
                 const index = range.index;
+                console.log("Editor change triggered at index ", index);
                 emit('client_text_change', {
                     delta: delta.ops,
                     documentId: documentId,

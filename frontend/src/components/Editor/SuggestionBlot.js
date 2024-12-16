@@ -8,8 +8,6 @@ class SuggestionBlot extends Inline {
     constructor(domNode, value) {
         console.log('[SuggestionBlot] Creating suggestion blot with data:', value, " on DOM node ", domNode);
         super(domNode, value);
-        //this.handleClick = this.handleClick.bind(this);
-        //this.domNode.addEventListener('click', this.handleClick.bind(this));
         this.description = null;
         this.decisionButtons = null;
         this.domNode.setAttribute('data.suggestion', 'true');
@@ -17,8 +15,7 @@ class SuggestionBlot extends Inline {
         this.domNode.classList.add('suggestion');
         this.type = value.type;
         this.value = value;
-        //this.domNode.addEventListener('click', this.handleClick);
-
+        
         console.log('[SuggestionBlot] Created suggestion blot with data:', value, " on DOM node ", domNode);
 
     }
@@ -43,18 +40,22 @@ class SuggestionBlot extends Inline {
 
         this.domNode.addEventListener('click', (e) => {
             console.log('[SuggestionBlot] Click event triggered', e);
+            e.preventDefault();
+            e.stopPropagation();
             this.showDecisionButtons(e);
         });
         
         this.domNode.addEventListener('mouseover', (e) => {
             console.log('[SuggestionBlot] Mouseover event triggered', e);
-            this.domNode.style.backgroundColor = '#ffe0e0';
+            e.preventDefault();
+            e.stopPropagation();
             this.showDescription(e);
         });
         
         this.domNode.addEventListener('mouseout', (e) => {
             console.log('[SuggestionBlot] Mouseout event triggered', e);
-            this.domNode.style.backgroundColor = '#ffebeb';
+            e.preventDefault();
+            e.stopPropagation();
             this.hideDescription();
         });
         
@@ -79,9 +80,13 @@ class SuggestionBlot extends Inline {
 
         if (this.decisionButtons) {
             console.log('[SuggestionBlot] Hiding existing tooltip');
+            event.preventDefault();
+            event.stopPropagation();
             this.hideDecisionButtons();
         } else {
             console.log('[SuggestionBlot] Showing new tooltip');
+            event.preventDefault();
+            event.stopPropagation();
             this.showDecisionButtons(event);
         }
     }
@@ -159,12 +164,14 @@ class SuggestionBlot extends Inline {
         const rejectButton = this.createTooltipButton('✗', 'red');
 
         acceptButton.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             this.acceptSuggestion();
             this.hideDecisionButtons();
         });
 
         rejectButton.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             this.rejectSuggestion();
             this.hideDecisionButtons();
