@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import './styles/mainApp.css'; // Make sure to create this CSS file
 
 export const MainApp = () => {
@@ -64,7 +65,11 @@ export const MainApp = () => {
     return (
         <div className="app-container">
             <div className="main-header">
-                <button onClick={handleCreateNewDocument} className="create-new-document-button">Create New Document</button>
+                <button 
+                    variant="ghost"
+                    onClick={handleCreateNewDocument} 
+                    className="create-new-document-button"
+                ><Plus/></button>
                 <input
                     type="text"
                     placeholder="Search by document title, id or creation date..."
@@ -87,7 +92,7 @@ export const MainApp = () => {
                                 </div>
                                 <div className="document-info">
                                     <h2>{doc.title}</h2>
-                                    <p>ID: {doc.id}</p>
+                                    {!doc.title && <p>ID: {doc.id}</p>}
                                     <p>Created: {new Date(doc.created_at).toLocaleString()}</p>
                                     <p>Modified: {new Date(doc.updated_at).toLocaleString()}</p>
                                     <p>User ID: {doc.user_id}</p>
