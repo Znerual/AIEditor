@@ -15,6 +15,7 @@ import 'react-quill/dist/quill.snow.css';
 import './styles/App.css';
 import './styles/components.css';
 import './styles/globals.css'; 
+import './styles/editor.css';
 
 // const Delta = Quill.import('delta');
 Quill.register(SuggestionBlot);
@@ -121,6 +122,7 @@ export const MainApp = () => {
 
         if (suggested_edits && suggested_edits.length > 0) {
             suggested_edits.forEach(edit => {
+            console.log('[handleChatAnswer] Processing edit:', edit);
             if (edit.name === 'insert_text') {
                 const insertData = {
                 id: edit.name, // Or a unique ID from the backend
@@ -128,12 +130,16 @@ export const MainApp = () => {
                 text: edit.arguments.text,
                 position: edit.arguments.position
                 };
-        
+                console.log('[handleChatAnswer] Inserting suggestion with data:', insertData);
+            
                 // Insert a placeholder for the suggestion
-                quill.insertText(insertData.position, "[", 'api');
-                quill.insertEmbed(insertData.position + 1, 'suggestion', insertData, 'api');
-                quill.insertText(insertData.position + 2, "]", 'api');
-                quill.setSelection(insertData.position + 3, 0)
+                console.log('[handleChatAnswer] Inserting suggestion embed');
+                quill.insertText(insertData.position, "*", 'api');
+                quill.insertEmbed(insertData.position, 'suggestion', insertData, 'api');
+
+                // Log the DOM after insertion
+                console.log('[handleChatAnswer] DOM after insertion:', 
+                    quill.root.querySelector('.suggestion-debug'));
             } else if (edit.name === 'delete_text') {
                 const deleteData = {
                 id: edit.name, // Unique ID for the suggestion
@@ -141,10 +147,9 @@ export const MainApp = () => {
                 start: edit.arguments.start,
                 end: edit.arguments.end
                 };
-                quill.insertText(deleteData.start, "[", 'api');
-                quill.insertEmbed(deleteData.start + 1, 'suggestion', deleteData, 'api');
-                quill.insertText(deleteData.end + 1, "]", 'api');
-                quill.setSelection(deleteData.end + 2, 0)
+                quill.insertText(deleteData.start, "*", 'api');
+                quill.insertEmbed(deleteData.start, 'suggestion', deleteData, 'api');
+                
             } else if (edit.name === 'replace_text') {
                 const replaceData = {
                 id: edit.name, // Unique ID for the suggestion
@@ -153,10 +158,10 @@ export const MainApp = () => {
                 end: edit.arguments.end,
                 text: edit.arguments.new_text
                 };
-                quill.insertText(replaceData.start, "[", 'api');
-                quill.insertEmbed(replaceData.start + 1, 'suggestion', replaceData, 'api');
-                quill.insertText(replaceData.end + 1, "]", 'api');
-                quill.setSelection(replaceData.end + 2, 0)
+               
+                quill.insertText(replaceData.start, "*", 'api');
+                quill.insertEmbed(replaceData.start, 'suggestion', replaceData, 'api');
+ 
             }
             });
         }
@@ -436,6 +441,8 @@ export const MainApp = () => {
         const { suggestionId, suggestionType, text, original, start, end } = event.detail;
         const quill = quillRef.current.getEditor();
 
+        console.log("Accepting suggestion ", suggestionId, suggestionType, text, original, start, end);
+
         // Find the suggestion blot by its ID
         const blot = quill.scroll.find(event.target);
 
@@ -473,6 +480,8 @@ export const MainApp = () => {
         const { suggestionId } = event.detail;
         const quill = quillRef.current.getEditor();
 
+        console.log("Rejecting suggestion ", suggestionId);
+
         // Find the suggestion blot by its ID
         const blot = quill.scroll.find(event.target);
         
@@ -506,6 +515,12 @@ export const MainApp = () => {
             ['clean']
         ],
     }), []);
+
+    useEffect(() => {
+        console.log('[MainApp] Registered Quill formats:', Quill.imports);
+        console.log('[MainApp] SuggestionBlot registered:', Quill.imports['formats/suggestion']);
+    }, []);
+
 
     useEffect(() => {
         const quill = quillRef.current.getEditor();
