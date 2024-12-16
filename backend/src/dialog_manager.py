@@ -283,7 +283,7 @@ class DialogManager:
         if self.debug:
             # In debug mode, simulate function calls without execution
             function_calls = [
-                FunctionCall(name="insert_text", arguments={'text': 'inserted text', 'position': 0}, status="suggested")
+                FunctionCall(name="insert_text", arguments={'text': 'inserted text', 'position': 4}, status="suggested")
             ]
             response_text = "Here are some suggested edits (debug mode)." 
         else:
