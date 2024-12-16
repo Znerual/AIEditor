@@ -204,6 +204,7 @@ export const Editor = ({ documentId }) => {
                 console.error("Document ID mismatch");
             }
             setEditorContent(event.content);
+            setCurrentDocumentTitle(event.title);
         }
     }, [setEditorContent]);
 
@@ -352,57 +353,62 @@ export const Editor = ({ documentId }) => {
     }, [handleKeyDown]);
 
     const { emit, status, debugEvents: wsDebugEvents } = useWebSocket(socketEvents);
-    
+
     // Update debug events whenever websocket events occur
     useEffect(() => {
         setDebugEvents(wsDebugEvents);
     }, [wsDebugEvents]);
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
+        console.log("Editor change triggered", source);
         if (source === 'user') {
             const range = editor.getSelection();
-            if (range) {
-                const index = range.index;
-                console.log("Editor change triggered at index ", index);
-                emit('client_text_change', {
-                    delta: delta.ops,
-                    documentId: documentId,
-                });
-
-                // use execution guard to prevent multiple requests
-                // Update the latest pending request data
-                lastRequestIdRef.current = Date.now();
-                pendingRequestRef.current = {
-                    documentId,
-                    cursorPosition: index,
-                    requestId: lastRequestIdRef.current, // Generate a unique request ID
-                };
-
-                // Clear the previous timer
-                if (debounceTimerRef.current) {
-                    clearTimeout(debounceTimerRef.current);
-                }
-
-
-                // Set up a new debounce timer
-                debounceTimerRef.current = setTimeout(() => {
-
-                    if (pendingRequestRef.current) {
-                        const { documentId, cursorPosition, requestId } = pendingRequestRef.current;
-    
-                        // Emit the latest pending request
-                        console.log("Emitting latest request:", requestId);
-                        emit('client_request_suggestions', {
-                            documentId,
-                            cursorPosition,
-                            requestId,
-                        });
-    
-                        // Clear the pending request data after emitting
-                        pendingRequestRef.current = null;
-                    }
-                }, DEBOUNCE_WAITING_TIME);
+            console.log("Range ", range);
+            let index;
+            if (!range) {
+                console.log("Editor change triggered, no range");
+                index = editor.getLength();
+            } else {
+                index = range.index;
             }
+            emit('client_text_change', {
+                delta: delta.ops,
+                documentId: documentId,
+            });
+
+            // use execution guard to prevent multiple requests
+            // Update the latest pending request data
+            lastRequestIdRef.current = Date.now();
+            pendingRequestRef.current = {
+                documentId,
+                cursorPosition: index,
+                requestId: lastRequestIdRef.current, // Generate a unique request ID
+            };
+
+            // Clear the previous timer
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+
+
+            // Set up a new debounce timer
+            debounceTimerRef.current = setTimeout(() => {
+
+                if (pendingRequestRef.current) {
+                    const { documentId, cursorPosition, requestId } = pendingRequestRef.current;
+
+                    // Emit the latest pending request
+                    console.log("Emitting latest request:", requestId);
+                    emit('client_request_suggestions', {
+                        documentId,
+                        cursorPosition,
+                        requestId,
+                    });
+
+                    // Clear the pending request data after emitting
+                    pendingRequestRef.current = null;
+                }
+            }, DEBOUNCE_WAITING_TIME);
         }
         setEditorContent(content);
 
