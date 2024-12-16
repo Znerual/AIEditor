@@ -3,9 +3,9 @@ import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu,
     MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, 
     MenubarSubTrigger, MenubarTrigger } from '../ui/menubar';
 import { Button, buttonVariants } from '../ui/button';
-import { ChevronRight, ChevronLeft, Pencil } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Pencil, HomeIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import '../../styles/headerbarSection.css';
@@ -19,8 +19,14 @@ export const Headerbar = ({
     onTitleEditCommit,
     onStartTitleEdit
 }) => {
-  const { user, logout } = useAuth();
-  const [localTitle, setLocalTitle] = useState(title);
+    const { user, logout } = useAuth();
+    const [localTitle, setLocalTitle] = useState(title);
+    const navigate = useNavigate();
+
+    const handleGoHome = () => {
+        navigate('/'); // Navigate to the root route, which is your MainApp/Landing Page
+    };
+
     return (
         <div className="menubar-container">
             <div className="menubar-toggle">
@@ -111,6 +117,9 @@ export const Headerbar = ({
             )}
             </div>
             <div className="menubar-actions">
+                <Button variant="ghost" size="icon" className="home-button" onClick={handleGoHome}>
+                    <HomeIcon className="h-4 w-4" />
+                </Button>
                 {user?.isAdmin && (
                     <Link to="/admin" className={buttonVariants({ variant: "default", className: 'mr-2' })}>
                         Admin
