@@ -8,6 +8,7 @@ export const MainApp = () => {
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [searchMode, setSearchMode] = useState('keyword'); // 'keyword' or 'embedding'
     const [searchTerm, setSearchTerm] = useState('');
     const { token } = useAuth();
     const navigate = useNavigate();
@@ -37,7 +38,9 @@ export const MainApp = () => {
 
     useEffect(() => {
         const fetchDocuments = async () => {
+            setLoading(true);
             try {
+
                 const response = await fetch('http://localhost:5000/api/user/documents', {
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
@@ -62,6 +65,10 @@ export const MainApp = () => {
         new Date(doc.created_at).toLocaleString().toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const handleSearchModeChange = () => {
+        setSearchMode(searchMode === 'keyword' ? 'embedding' : 'keyword');
+    };
+
     return (
         <div className="app-container">
             <div className="main-header">
@@ -77,6 +84,9 @@ export const MainApp = () => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="search-input"
                 />
+                <button onClick={handleSearchModeChange} className="search-mode-button">
+                    {searchMode === 'keyword' ? 'Keyword' : 'Embedding'}
+                </button>
             </div>
             <div className='container'>
                 <h1>Your Documents</h1>
