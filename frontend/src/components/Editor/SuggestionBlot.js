@@ -8,69 +8,81 @@ class SuggestionBlot extends Inline {
     constructor(domNode, value) {
         console.log('[SuggestionBlot] Creating suggestion blot with data:', value, " on DOM node ", domNode);
         super(domNode, value);
-        this.description = null;
-        this.decisionButtons = null;
-        this.domNode.setAttribute('data.suggestion', 'true');
-        this.domNode.style.cursor = 'pointer';
-        this.domNode.classList.add('suggestion');
-        this.type = value.type;
-        this.value = value;
-        
-        console.log('[SuggestionBlot] Created suggestion blot with data:', value, " on DOM node ", domNode);
+        if (value) {
+            this.description = null;
+            this.decisionButtons = null;
+            this.domNode.setAttribute('data.suggestion', 'true');
+            this.domNode.style.cursor = 'pointer';
+            this.domNode.classList.add('suggestion');
+            this.type = value.type;
+            this.value = value;
+            
+            console.log('[SuggestionBlot] Created suggestion blot with data:', value, " on DOM node ", domNode);
 
+        }
+        
     }
 
     static create(data) {
-        console.log("Creating blot with ", data);
         let node = super.create(data);
-        node.setAttribute('class', 'suggestion'); // Add a class for styling
-        node.setAttribute('dataset.type', data.type); // 'insert', 'delete', 'replace'
-        
-        console.log("Created suggestion blot with data ", data, node);
+        if (this.value) {
+            console.log("Creating blot with ", data);
+            node.setAttribute('class', 'suggestion'); // Add a class for styling
+            node.setAttribute('dataset.type', data.type); // 'insert', 'delete', 'replace'
+            console.log("Created suggestion blot with data ", data, node);
+        }
         return node;
     }
 
     // Attach events after the blot is mounted
     attach() {
-        console.log('[SuggestionBlot] Attach called');
-
         super.attach();
+        if (this.value) {
+            console.log('[SuggestionBlot] Attach called');
 
-        console.log('[SuggestionBlot] Suggestion blot attached:', this.domNode);
 
-        this.domNode.addEventListener('click', (e) => {
-            console.log('[SuggestionBlot] Click event triggered', e);
-            e.preventDefault();
-            e.stopPropagation();
-            this.showDecisionButtons(e);
-        });
-        
-        this.domNode.addEventListener('mouseover', (e) => {
-            console.log('[SuggestionBlot] Mouseover event triggered', e);
-            e.preventDefault();
-            e.stopPropagation();
-            this.showDescription(e);
-        });
-        
-        this.domNode.addEventListener('mouseout', (e) => {
-            console.log('[SuggestionBlot] Mouseout event triggered', e);
-            e.preventDefault();
-            e.stopPropagation();
-            this.hideDescription();
-        });
-        
-        console.log('[SuggestionBlot] Events attached to node:', this.domNode);
+            console.log('[SuggestionBlot] Suggestion blot attached:', this.domNode);
+
+            this.domNode.addEventListener('click', (e) => {
+                console.log('[SuggestionBlot] Click event triggered', e);
+                e.preventDefault();
+                e.stopPropagation();
+                this.showDecisionButtons(e);
+            });
+            
+            this.domNode.addEventListener('mouseover', (e) => {
+                console.log('[SuggestionBlot] Mouseover event triggered', e);
+                e.preventDefault();
+                e.stopPropagation();
+                this.showDescription(e);
+            });
+            
+            this.domNode.addEventListener('mouseout', (e) => {
+                console.log('[SuggestionBlot] Mouseout event triggered', e);
+                e.preventDefault();
+                e.stopPropagation();
+                this.hideDescription();
+            });
+            
+            console.log('[SuggestionBlot] Events attached to node:', this.domNode);
+        }
     }
 
     // Clean up events when blot is unmounted
     detach() {
-        console.log('[SuggestionBlot] Detach called');
-        this.domNode.removeEventListener('click', this.handleClick);
+        if (this.value) {
+            console.log('[SuggestionBlot] Detach called');
+            this.domNode.removeEventListener('click', this.handleClick);
+        }
         super.detach();
     }
 
-    static formats() {
-        return true;
+    static formats(node) {
+        if (node.hasAttribute('data.suggestion')) {
+            return true;
+        }
+        return false;
+        
     }
     
     handleClick(event) {
@@ -131,21 +143,9 @@ class SuggestionBlot extends Inline {
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
-        Object.assign(this.description.style, {
-            position: 'absolute',
-            top: `${rect.bottom + scrollTop}px`,
-            left: `${rect.left + scrollLeft}px`,
-            backgroundColor: '#444',
-            color: 'white',
-            borderRadius: '5px',
-            padding: '5px 10px',
-            display: 'flex',
-            gap: '10px',
-            zIndex: '1000',
-            fontFamily: 'sans-serif',
-            fontSize: '14px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-        });
+        this.description.style.top = `${rect.bottom + scrollTop}px`;
+        this.description.style.left = `${rect.left + scrollLeft}px`;
+
     }
 
     hideDescription() {
@@ -159,6 +159,9 @@ class SuggestionBlot extends Inline {
         this.decisionButtons = document.createElement('div');
         this.decisionButtons.classList.add('suggestion-tooltip');
 
+        // Create a container for the buttons
+        const buttonContainer = document.createElement('div');
+        buttonContainer.classList.add('button-container');
         // Create buttons with improved styling
         const acceptButton = this.createTooltipButton('✓', 'green');
         const rejectButton = this.createTooltipButton('✗', 'red');
@@ -177,10 +180,12 @@ class SuggestionBlot extends Inline {
             this.hideDecisionButtons();
         });
 
-        this.decisionButtons.appendChild(acceptButton);
-        this.decisionButtons.appendChild(rejectButton);
-        document.body.appendChild(this.decisionButtons);
+        buttonContainer.appendChild(acceptButton);
+        buttonContainer.appendChild(rejectButton);
 
+        // Add the button container to the tooltip
+        this.decisionButtons.appendChild(buttonContainer);
+        document.body.appendChild(this.decisionButtons);
         // Add global click listener to close tooltip
         this.documentClickHandler = (e) => {
             if (this.decisionButtons !== null && !this.decisionButtons.contains(e.target) && !this.domNode.contains(e.target)) {
@@ -194,21 +199,8 @@ class SuggestionBlot extends Inline {
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
-        Object.assign(this.decisionButtons.style, {
-            position: 'absolute',
-            top: `${rect.bottom + scrollTop}px`,
-            left: `${rect.left + scrollLeft}px`,
-            backgroundColor: '#444',
-            color: 'white',
-            borderRadius: '5px',
-            padding: '5px 10px',
-            display: 'flex',
-            gap: '10px',
-            zIndex: '1000',
-            fontFamily: 'sans-serif',
-            fontSize: '14px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-        });
+        this.decisionButtons.style.top = `${rect.bottom + scrollTop}px`;
+        this.decisionButtons.style.left = `${rect.left + scrollLeft}px`;
 
     }
 
@@ -222,16 +214,9 @@ class SuggestionBlot extends Inline {
     createTooltipButton(text, color) {
         const button = document.createElement('button');
         button.textContent = text;
-        Object.assign(button.style, {
-            backgroundColor: color,
-            color: 'white',
-            border: 'none',
-            borderRadius: '3px',
-            padding: '5px 10px',
-            cursor: 'pointer',
-            transition: 'opacity 0.2s',
-            fontWeight: 'bold'
-        });
+        button.classList.add('button');
+        button.classList.add(color === 'green' ? 'accept' : 'reject');
+
         
         button.addEventListener('mouseover', () => {
             button.style.opacity = '0.8';
@@ -264,8 +249,7 @@ class SuggestionBlot extends Inline {
 
 
     length() {
-        // Only the suggestion representation should be taken into account
-        return 1;
+       return 1;
     }
 }
 

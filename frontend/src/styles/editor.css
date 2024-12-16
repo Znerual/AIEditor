@@ -1,50 +1,59 @@
-/* frontend/src/styles/components.css (or your preferred CSS file) */
-.ql-editor .suggestion {  /* Target the suggestion blot within Quill editor */
-    background-color: #e0f0ff; /* Light blue background */
-    border: 1px solid #a0c0e0; /* Light blue border */
-    padding: 0.5px; /* Small padding */
-    margin: 0 1px;  /* Small margin */
-    border-radius: 3px; /* Rounded corners */
-    cursor: pointer;  /* Indicate that it's interactive */
-  }
-  
-  .ql-editor .suggestion:hover {
-    background-color: #cce0ff; /* Slightly darker on hover */
-  }
-  
-  /* Style for the tooltip (optional, but recommended) */
-  .suggestion-tooltip {
-    position: absolute;
-    background-color: #444;
-    color: white;
-    border-radius: 5px;
-    padding: 5px 10px;
-    font-family: sans-serif;
-    font-size: 14px;
-    display: flex;
-    gap: 10px;
-    z-index: 10; /* Ensure it's above other elements */
-  }
-  
-  .suggestion-tooltip button {
-    border: none;
-    border-radius: 3px;
-    padding: 5px 10px;
-    cursor: pointer;
-    color: white;
-  }
-  
-  .suggestion-tooltip button:first-child { /* Accept button */
-    background-color: green;
-  }
-  
-  .suggestion-tooltip button:last-child { /* Reject button */
-    background-color: red;
-  }
+/* SuggestionBlot.css */
 
-  .suggestion {
-    background-color: #f0f0f0;
-    border-radius: 3px;
-    padding: 2px 4px;
-    transition: background-color 0.2s;
+/* Target the suggestion blot within Quill editor (more specific) */
+.ql-editor .suggestion {
+  cursor: pointer;
+  background-color: #ffebeb; /* Default background color */
+}
+
+.ql-editor .suggestion:hover {
+  background-color: #ffe0e0; /* Highlight on hover */
+}
+
+.suggestion-tooltip {
+  position: absolute;
+  background-color: #444;
+  color: white;
+  border-radius: 5px;
+  padding: 5px 10px;
+  z-index: 1000;
+  font-family: sans-serif;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Style for the description text */
+.suggestion-tooltip .description {
+  margin-bottom: 5px;
+  display: block; /* Makes the span take up the full width */
+}
+
+/* Style for the button container */
+.suggestion-tooltip .button-container {
+  display: flex; /* Use flex to align buttons horizontally */
+  gap: 10px; /* Space between buttons */
+}
+
+/* Button Styles */
+.suggestion-tooltip .button { /* More specific selector */
+  background-color: #ccc; /* Default button color */
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  font-weight: bold;
+}
+
+.suggestion-tooltip .button:hover {
+  opacity: 0.8;
+}
+
+.suggestion-tooltip .button.accept {
+  background-color: green;
+}
+
+.suggestion-tooltip .button.reject {
+  background-color: red;
 }
