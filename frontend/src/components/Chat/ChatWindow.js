@@ -7,14 +7,22 @@ import { Send } from 'lucide-react';
 import '../../styles/chatSection.css';
 
 export const ChatWindow = ({ messages, onSend }) => {
-    const [input, setInput] = useState('');
+    const [htmlContent, setHtmlContent] = useState('');
+    const [plainText, setPlainText] = useState('');
+
+    // Custom handler to extract plain text
+    const handleInputChange = (html, delta, source, editor) => {
+        setHtmlContent(html);
+        setPlainText(editor.getText().trim());
+    };
 
     const handleSubmit = useCallback(() => {
-        if (input.trim()) {
-            onSend(input);
-            setInput('');
+        if (plainText) {
+          onSend(plainText);
+          setHtmlContent('');
+          setPlainText('');
         }
-    }, [input, onSend]);
+      }, [plainText, onSend]);
 
     return (
         <div className="chat-section">
@@ -33,8 +41,8 @@ export const ChatWindow = ({ messages, onSend }) => {
             </div>
             <div className="chat-input-container">
             <ReactQuill
-            value={input}
-            onChange={setInput}
+            value={htmlContent}
+            onChange={handleInputChange}
             modules={{ toolbar: false }}
             />
             <Button onClick={handleSubmit}>
