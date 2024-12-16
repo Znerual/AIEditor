@@ -22,6 +22,7 @@ class SocketManager:
     _socketio: Optional[SocketIO] = None
     _autocomplete_manager: Optional[AutocompleteManager] = None
     _executor: Optional[ThreadPoolExecutor] = None
+    current_content_selection = []
 
     def __new__(cls):
         if cls._instance is None:
@@ -221,14 +222,14 @@ class SocketManager:
         def handle_client_content_changes(user_id, data):
             print("Content uploaded or selection changed")
             print(data)
-            file_selection_cleaned = [item for item in data if 'file_id' in item and 'content_type' in item]  
-            self._autocomplete_manager.on_user_content_change(user_id, file_selection_cleaned)
+            self.current_content_selection = [item for item in data if 'file_id' in item and 'content_type' in item]  
+            self._autocomplete_manager.on_user_content_change(user_id, self.current_content_selection)
 
         @self._socketio.on('client_chat')
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_chat_event(user_id, msg):
             document_id = session.get('document_id')  # Get document_id from session
-            response_data = self._dialog_manager.get_response(user_id, msg, document_id)
+            response_data = self._dialog_manager.get_response(user_id, msg, document_id, self.current_content_selection)
 
             # Emit response and suggested edits
             self.emit_event(WebSocketEvent("server_chat_answer", {
