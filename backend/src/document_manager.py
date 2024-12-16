@@ -31,8 +31,10 @@ class DocumentManager:
         return updated_content
     
     @staticmethod
-    def get_document_content(document: Union[str, Document], user_id: str, as_string=False) -> dict:
+    def get_document_content(document: Union[str, Document], user_id: Optional[int] = None, as_string=False) -> dict:
         if isinstance(document, str):
+            if not user_id:
+                raise ValueError("user_id is required when passing a document_id as a string")
             document_id = document
             document = Document.query.filter_by(id=document_id, user_id=user_id).first()
         
