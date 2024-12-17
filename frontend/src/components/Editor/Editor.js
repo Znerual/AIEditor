@@ -11,7 +11,8 @@ import { DebugPanel } from '../../components/Debug/DebugPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import 'react-quill/dist/quill.snow.css';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Check, X  } from 'lucide-react';
+import { Button } from '../ui/button';
 
 // Import CSS files
 import '../../styles/components.css';
@@ -38,6 +39,8 @@ export const Editor = ({ documentId }) => {
     const [cursorPositionBeforeSuggestion, setCursorPositionBeforeSuggestion] = useState(null);
     const [userTypedText, setUserTypedText] = useState('');
     const [suggestedEdits, setSuggestedEdits] = useState([]);
+    const [showStructureConfirmation, setShowStructureConfirmation] = useState(false);
+    const [restructuredDocument, setRestructuredDocument] = useState('');
     const lastRequestIdRef = useRef(null); // Use a ref to allow for latest updates without rerendering
     const debounceTimerRef = useRef(null);
     const pendingRequestRef = useRef(null);
@@ -87,8 +90,6 @@ export const Editor = ({ documentId }) => {
         console.log("Handling structure upload", data);
         if (data) {
             emit('client_structure_uploaded', data);
-        } else {
-            emit('client_structure_removed');
         }
         
       }, []);
@@ -215,6 +216,17 @@ export const Editor = ({ documentId }) => {
             setCurrentDocumentTitle(event.title);
         }
     }, [setEditorContent]);
+
+    const handleGetStructure = useCallback((event) => {
+        console.log("Received structure", event); // event has document_id and content fields
+        if (event && event.content) {
+            if (event.documentId != documentId) {
+                console.error("Document ID mismatch");
+            }
+            setRestructuredDocument(event);
+            setShowStructureConfirmation(true);
+        }
+    }, [documentId]);
 
     const matchesSuggestion = (typed, suggestion) => {
         if (!typed || !suggestion) return false;
@@ -349,6 +361,7 @@ export const Editor = ({ documentId }) => {
         server_disconnects: () => console.log('server disconnected'),
         server_authentication_failed: handleAuthenticationFailed,
         server_sent_document_content: handleGetContent,
+        server_sent_new_structure: handleGetStructure,
         server_autocompletion_suggestions: handleAutocompletion,
         server_document_title_generated: handleDocumentTitleGenerated,
         server_chat_answer: handleChatAnswer,
@@ -517,6 +530,27 @@ export const Editor = ({ documentId }) => {
         };
     }, [handleAcceptSuggestion, handleRejectSuggestion]);
 
+    const handleAcceptStructure = useCallback(() => {
+        if (!restructuredDocument) {
+            console.error('No restructuredDocument found');
+            return;
+        }
+        setEditorContent(restructuredDocument.content);
+        setShowStructureConfirmation(false);
+        // Optionally, clear the restructuredDocument state if you don't need it anymore
+        setRestructuredDocument('');
+        emit('client_structure_accepted', );
+    }, [restructuredDocument, setEditorContent]);
+    
+    const handleRejectStructure = useCallback(() => {
+        setShowStructureConfirmation(false);
+        // Optionally, clear the restructuredDocument state
+        setRestructuredDocument('');
+        emit('client_structure_rejected');
+    }, []);
+
+
+
     return (
         <div className="app-container">
             <Headerbar 
@@ -530,6 +564,15 @@ export const Editor = ({ documentId }) => {
             />
             
             <div className="main-content">
+                {showAlert && (
+                    <Alert className="mb-4 fixed top-4 right-4 z-50" variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Error</AlertTitle>
+                        <AlertDescription>
+                            {alertMessage}
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <div className={`sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
                     <div className="sidebar-content">
                         <StructurUpload
@@ -556,8 +599,26 @@ export const Editor = ({ documentId }) => {
                         modules={modules}
                     />
                 </div>
+                {showStructureConfirmation && (
+                    <div className="structure-preview">
+                        <h3>Proposed Structure</h3>
+                        <ReactQuill
+                        value={restructuredDocument.content}
+                        readOnly={true}
+                        theme="bubble"
+                        />
+                        <div className="button-group">
+                        <Button variant="success" onClick={handleAcceptStructure}>
+                            <Check className="h-4 w-4 mr-2" /> Accept
+                        </Button>
+                        <Button variant="destructive" onClick={handleRejectStructure}>
+                            <X className="h-4 w-4 mr-2" /> Reject
+                        </Button>
+                        </div>
+                    </div>
+                )}
 
-                {process.env.REACT_APP_DEBUG && (
+                {process.env.REACT_APP_DEBUG_PANE && (
                     <DebugPanel 
                         events={debugEvents}
                         socketStatus={status}

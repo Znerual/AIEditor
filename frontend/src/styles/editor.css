@@ -1,4 +1,6 @@
-/* styles/App.css */
+/* styles/editor.css */
+
+/* App Container */
 .app-container {
   display: flex;
   flex-direction: column;
@@ -6,6 +8,7 @@
   background-color: white;
 }
 
+/* Menu Bar */
 .menubar-container {
   width: 100%;
   border-bottom: 1px solid #e2e8f0;
@@ -23,6 +26,7 @@
   margin-left: 0.5rem;
 }
 
+/* Main Content Area */
 .main-content {
   display: flex;
   flex: 1;
@@ -126,4 +130,64 @@
 
 .suggestion-tooltip .button.reject {
   background-color: red;
+}
+
+/* Structure Preview Styles */
+.structure-preview {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 30%; /* Adjust width as needed */
+  height: 100%;
+  background-color: #f8f8f8;
+  border-left: 1px solid #ccc;
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 10; /* Ensure it's above other elements */
+  overflow-y: auto; /* Add scroll if content overflows */
+  display: flex;
+  flex-direction: column;
+}
+
+.structure-preview h3 {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.structure-preview .ql-container {
+  flex-grow: 1; /* Allow Quill container to take up available space */
+}
+
+.structure-preview .button-group {
+  display: flex;
+  justify-content: space-around;
+  margin-top: auto; /* Push the button group to the bottom */
+  padding-top: 20px; /* Add some padding above the buttons */
+}
+
+/* Corrected styles for accept and reject buttons */
+.structure-preview .button-group .accept {
+  background-color: #4CAF50; /* Green */
+  color: white;
+  border: none;
+}
+
+.structure-preview .button-group .reject {
+  background-color: #f44336; /* Red */
+  color: white;
+  border: none;
+}
+
+/* Style for ReactQuill in structure preview */
+.structure-preview .ql-toolbar {
+  display: none; /* Hide the toolbar */
+}
+
+.structure-preview .ql-container {
+  border: none;
+  font-size: 14px; /* Adjust font size as needed */
+}
+
+.structure-preview .ql-editor {
+  padding: 0; /* Remove default padding */
 }
