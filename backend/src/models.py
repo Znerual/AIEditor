@@ -9,50 +9,7 @@ import base64
 import json
 from delta import Delta
 db = SQLAlchemy()
-    
-def add_read_access(document_id, user_id):
-    """Add read access for a user to a document"""
 
-    # Check if the user already has read access
-    access_entry = DocumentReadAccess.query.filter_by(document_id=document_id, user_id=user_id).first()
-    if access_entry:
-        return access_entry
-    
-    access = DocumentReadAccess(document_id=document_id, user_id=user_id)
-    db.session.add(access)
-    db.session.commit()
-    return access
-    
-def add_edit_access(document_id, user_id):
-    """Add edit access for a user to a document"""
-
-    # Check if the user already has edit access
-    access_entry = DocumentEditAccess.query.filter_by(document_id=document_id, user_id=user_id).first()
-    if access_entry:
-        return access_entry
-    
-    access = DocumentEditAccess(document_id=document_id, user_id=user_id)
-    db.session.add(access)
-    db.session.commit()
-    return access
-
-def remove_read_access(document_id, user_id):
-    """Remove read access for a user from a document"""
-    access_entry = DocumentReadAccess.query.filter_by(document_id=document_id, user_id=user_id).first()
-    if not access_entry:
-        raise ValueError(f"No read access entry found for user {user_id} on document {document_id}")
-
-    db.session.delete(access_entry)
-    db.session.commit()
-
-def remove_edit_access(document_id, user_id):
-    """Remove edit access for a user from a document"""
-    access_entry = DocumentEditAccess.query.filter_by(document_id=document_id, user_id=user_id).first()
-    if not access_entry:
-        raise ValueError(f"No edit access entry found for user {user_id} on document {document_id}")
-
-    db.session.delete(access_entry)
-    db.session.commit()
 
 class DocumentReadAccess(db.Model):
     __tablename__ = 'document_read_access'
