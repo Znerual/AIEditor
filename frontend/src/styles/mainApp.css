@@ -65,6 +65,18 @@
     position: relative; /* For absolute positioning of delete icon */
 }
 
+.document-card.owner {
+  background-color: #fff;
+}
+
+.document-card.edit {
+  background-color: #a0ceff;
+}
+
+.document-card.read {
+  background-color: #ffbcb4;
+}
+
 .document-card:hover {
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
     transform: translateY(-2px); /* Slightly lift the card */
@@ -106,6 +118,8 @@
     font-size: 0.9rem;
     color: #555;
 }
+
+
 
 .document-collaborators {
     margin-top: 10px;

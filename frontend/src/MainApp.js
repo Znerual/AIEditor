@@ -120,6 +120,7 @@ export const MainApp = () => {
                 }
                 const data = await response.json();
                 setDocuments(data);
+                console.log("Document Data", data);
             } catch (err) {
                 setError(err.message);
             } finally {
@@ -229,7 +230,7 @@ export const MainApp = () => {
             });
 
             if (!response.ok) {
-            throw new Error('Failed to add collaborator');
+            throw new Error('Failed to add collaborator', response);
             }
 
             // Handle successful addition
@@ -274,7 +275,7 @@ export const MainApp = () => {
                 {!loading && !error && (
                     <div className="document-grid">
                         {filteredDocuments.map(doc => (
-                            <div key={doc.id} className="document-card">
+                            <div key={doc.id} className={`document-card ${doc.access_level}`}>
                                 <label htmlFor={`thumbnail-upload-${doc.id}`} className="upload-thumbnail-container">
                                     <Upload className="upload-thumbnail-icon" />
                                 </label>
@@ -323,7 +324,7 @@ export const MainApp = () => {
                                             <div className="preview-image-placeholder"></div>
                                         )}
                                     </div>
-                                    <div className="document-info">
+                                    <div className={`document-info ${doc.access_level}`}>
                                         <h2>{doc.title}</h2>
                                         {!doc.title && <p>ID: {doc.id}</p>}
                                         <p>Created: {new Date(doc.created_at).toLocaleString()}</p>
