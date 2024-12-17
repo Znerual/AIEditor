@@ -1,10 +1,9 @@
 import os
 import hashlib
-import textract
-import mimetypes
 from pathlib import Path
 
 class FileProcessor:
+    
     def __init__(self, tmp_path):
         self.tmp_path = tmp_path
         
@@ -38,6 +37,7 @@ class FileProcessor:
         Process file content based on file type and return extracted text and hash.
         """
         try:
+            import textract
             # Create temporary file
             temp_file_path = os.path.join(self.tmp_path, filename)
             with open(temp_file_path, 'wb') as temp_file:
