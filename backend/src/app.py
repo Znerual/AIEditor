@@ -147,6 +147,68 @@ class FlaskApp:
                 'user': {'id': existing_user.id, 'email': existing_user.email, 'isAdmin': existing_user.is_admin}
             })
         
+        @self.app.route('/api/documents/<string:document_id>/collaborators', methods=['POST'])
+        @Auth.rest_auth_required
+        def add_collaborator(user_id, document_id):
+            """
+            Adds a collaborator to a document with specified access rights.
+            """
+            data = request.get_json()
+            collaborator_email = data.get('email')
+            rights = data.get('rights', 'read')  # Default to 'read' if not specified
+
+            # Validate input
+            if not collaborator_email:
+                return jsonify({'message': 'Collaborator email is required'}), 400
+
+            # Check if the document exists and if the current user is the owner
+            document = Document.query.filter_by(id=document_id).first()
+            if not document:
+                return jsonify({'message': 'Document not found'}), 404
+            if document.user_id != user_id:
+                return jsonify({'message': 'Only the document owner can add collaborators'}), 403
+
+            # Check if the collaborator exists
+            collaborator = User.query.filter_by(email=collaborator_email).first()
+            if not collaborator:
+                return jsonify({'message': 'Collaborator not found'}), 404
+
+            # Add collaborator with specified rights
+            try:
+                if rights == 'edit':
+                    # Check for existing edit access
+                    edit_access = DocumentEditAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
+                    if edit_access:
+                        return jsonify({'message': 'Collaborator already has edit access to this document'}), 409
+
+                    # Remove existing read access if it exists
+                    read_access = DocumentReadAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
+                    if read_access:
+                        db.session.delete(read_access)
+
+                    # Add edit access
+                    db.session.add(DocumentEditAccess(document_id=document_id, user_id=collaborator.id))
+                else:
+                    # Check for existing read access
+                    read_access = DocumentReadAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
+                    if read_access:
+                        return jsonify({'message': 'Collaborator already has read access to this document'}), 409
+
+                    # Remove existing edit access if it exists
+                    edit_access = DocumentEditAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
+                    if edit_access:
+                        db.session.delete(edit_access)
+
+                    # Add read access
+                    db.session.add(DocumentReadAccess(document_id=document_id, user_id=collaborator.id))
+                
+                db.session.commit()
+                return jsonify({'message': f'Collaborator {collaborator_email} added with {rights} access to document {document_id}'}), 200
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error adding collaborator: {e}")
+                return jsonify({'message': 'Failed to add collaborator'}), 500
+        
         @self.app.route('/api/thumbnails', methods=['POST'])
         @Auth.rest_auth_required
         def create_thumbnail(user_id):
@@ -253,46 +315,7 @@ class FlaskApp:
             except Exception as e:
                 print(f"Authentication or room joining error: {e}")
                 return jsonify({'message': str(e)}), 500
-        
-        @self.app.route('/api/user/read_documents', methods=['GET'])
-        @Auth.rest_auth_required
-        def get_user_documents(user_id):
-            if not user_id:
-                return jsonify({'message': 'User not found'}), 404
-            
-            documents = Document.query.filter_by(user_id=user_id).all()
 
-            # find all documents to which the user has read access
-            read_access_entries = DocumentReadAccess.query.filter_by(user_id=user_id).all()
-            
-            all_readable_documents = [*documents]
-            for read_access_entry in read_access_entries:
-                all_readable_documents.append(read_access_entry.document)
-            
-            documents_data = []
-            for document in all_readable_documents:
-                if document.thumbnail:
-                    documents_data.append({
-                        'id': document.id, 
-                        'thumbnail_id': document.thumbnail.id,
-                        'title': document.title, 
-                        'title_manually_set': document.title_manually_set, 
-                        'user_id': document.user_id, 
-                        'created_at': document.created_at, 
-                        'updated_at': document.updated_at, 
-                        'content': document.content}
-                        )
-                else:
-                    documents_data.append({
-                        'id': document.id, 
-                        'title': document.title, 
-                        'title_manually_set': document.title_manually_set, 
-                        'user_id': document.user_id, 
-                        'created_at': document.created_at, 
-                        'updated_at': document.updated_at, 
-                        'content': document.content}
-                        )
-            return jsonify(documents_data)
 
         @self.app.route('/api/user/search_documents', methods=['GET'])
         @Auth.rest_auth_required
@@ -300,12 +323,33 @@ class FlaskApp:
             search_term = request.args.get('search_term')
             if not search_term:
                 return jsonify({'message': 'Missing search term'}), 400
+            
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'message': 'User not found'}), 404
 
             try:
                 print("Searching for documents with term", search_term)
-                documents = Document.query.filter_by(user_id=user_id).all()
+                # Fetch documents owned by the user
+                owned_documents = Document.query.filter_by(user_id=user_id).all()
+
+                # Fetch documents shared with the user for read access
+                read_access_documents = [entry.document for entry in user.read_access_documents]
+
+                # Fetch documents shared with the user for edit access
+                edit_access_documents = [entry.document for entry in user.edit_access_documents]
+
+                # Combine all documents
+                all_accessible_documents = owned_documents + read_access_documents + edit_access_documents
+
+                # Remove duplicates (if a document is shared with both read and edit access)
+                unique_documents = list({doc.id: doc for doc in all_accessible_documents}.values())
+
                 print("Getting embeddings for user", user_id)
-                user_embeddings = [EmbeddingManager.get_embeddings(doc) for doc in documents]
+                user_embeddings = [EmbeddingManager.get_embeddings(doc) for doc in unique_documents]
                 print("Found", len(user_embeddings), "embeddings for user")
                 # Use the embedding manager to find similar documents
                 similar_file_embeddings = EmbeddingManager.find_similar_files(
@@ -351,46 +395,57 @@ class FlaskApp:
 
         @self.app.route('/api/user/documents', methods=['GET'])
         @Auth.rest_auth_required
-        def get_user_all_documents(user_id):
+        def get_user_documents(user_id):
             if not user_id:
                 return jsonify({'message': 'User not found'}), 404
-            
-            documents = Document.query.filter_by(user_id=user_id).all()
 
-            # find all documents to which the user has read access
-            read_access_entries = DocumentReadAccess.query.filter_by(user_id=user_id).all()
-            edit_access_entries = DocumentEditAccess.query.filter_by(user_id=user_id).all()
+            user = User.query.get(user_id)
+            if not user:
+                return jsonify({'message': 'User not found'}), 404
 
-            all_usable_documents = [*documents]
-            for read_access_entry in read_access_entries:
-                all_usable_documents.append(read_access_entry.document)
+            # Fetch documents owned by the user
+            owned_documents = Document.query.filter_by(user_id=user_id).all()
 
-            for edit_access_entry in edit_access_entries:
-                all_usable_documents.append(edit_access_entry.document)
-            
+            # Fetch documents shared with the user for read access
+            read_access_documents = [entry.document for entry in user.read_access_documents]
+
+            # Fetch documents shared with the user for edit access
+            edit_access_documents = [entry.document for entry in user.edit_access_documents]
+
+            # Combine all documents
+            all_accessible_documents = owned_documents + read_access_documents + edit_access_documents
+
+            # Remove duplicates (if a document is shared with both read and edit access)
+            unique_documents = list({doc.id: doc for doc in all_accessible_documents}.values())
+
             documents_data = []
-            for document in all_usable_documents:
+            for document in unique_documents:
+                # Determine the access level for this user
+                access_level = 'owner'
+                if document.user_id != user_id:
+                    if any(entry.user_id == user_id for entry in document.edit_access_entries):
+                        access_level = 'edit'
+                    elif any(entry.user_id == user_id for entry in document.read_access_entries):
+                        access_level = 'read'
+                
+                
+                document_info = {
+                    'id': document.id,
+                    'title': document.title,
+                    'title_manually_set': document.title_manually_set,
+                    'user_id': document.user_id,
+                    'created_at': document.created_at,
+                    'updated_at': document.updated_at,
+                    'content': document.content,
+                    'access_level': access_level,  # Include the access level
+                }
+
+                # Include thumbnail_id only if it exists
                 if document.thumbnail:
-                    documents_data.append({
-                        'id': document.id, 
-                        'thumbnail_id': document.thumbnail.id,
-                        'title': document.title, 
-                        'title_manually_set': document.title_manually_set, 
-                        'user_id': document.user_id, 
-                        'created_at': document.created_at, 
-                        'updated_at': document.updated_at, 
-                        'content': document.content}
-                        )
-                else:
-                    documents_data.append({
-                        'id': document.id, 
-                        'title': document.title, 
-                        'title_manually_set': document.title_manually_set, 
-                        'user_id': document.user_id, 
-                        'created_at': document.created_at, 
-                        'updated_at': document.updated_at, 
-                        'content': document.content}
-                        )
+                    document_info['thumbnail_id'] = document.thumbnail.id
+
+                documents_data.append(document_info)
+
             return jsonify(documents_data)
                     
 
@@ -712,8 +767,14 @@ class FlaskApp:
             documents = Document.query.all()
             document_list = []
             for doc in documents:
-                edit_access_users = [{'id': entry.id, 'user_id': entry.user_id, 'granted_at': entry.granted_at, 'user': {'id': entry.user.id, 'email': entry.user.email}} for entry in doc.edit_access_entries]
-                read_access_users = [{'id': entry.id, 'user_id': entry.user_id, 'granted_at': entry.granted_at, 'user': {'id': entry.user.id, 'email': entry.user.email}} for entry in doc.read_access_entries]
+                # Fetch collaborators (users with read or edit access)
+                collaborators = []
+                read_access_users = User.query.join(DocumentReadAccess, DocumentReadAccess.user_id == User.id).filter(DocumentReadAccess.document_id == doc.id).all()
+                edit_access_users = User.query.join(DocumentEditAccess, DocumentEditAccess.user_id == User.id).filter(DocumentEditAccess.document_id == doc.id).all()
+                for user in read_access_users:
+                    collaborators.append({'id': user.id, 'email': user.email, 'access': 'read'})
+                for user in edit_access_users:
+                    collaborators.append({'id': user.id, 'email': user.email, 'access': 'edit'})
 
                 # Calculate size using pg_column_size
                 size_query = text("SELECT pg_column_size(content) FROM documents WHERE id = :doc_id")
@@ -721,32 +782,22 @@ class FlaskApp:
                 size_in_bytes = size_result[0] if size_result else 0
                 size_in_kb = round(size_in_bytes / 1024.0, 2)
 
-               
+                doc_info = {
+                    'id': doc.id,
+                    'title': doc.title,
+                    'title_manually_set': doc.title_manually_set,
+                    'user_id': doc.user_id,
+                    'created_at': doc.created_at,
+                    'last_modified': doc.updated_at,
+                    'size_kb': size_in_kb,
+                    'collaborators': collaborators  # Add collaborators to the document info
+                }
+
+                # Include thumbnail_id only if it exists
                 if doc.thumbnail:
-                    document_list.append({
-                        'id': doc.id, 
-                        'thumbnail_id': doc.thumbnail.id,
-                        'title': doc.title, 
-                        'title_manually_set': doc.title_manually_set, 
-                        'user_id': doc.user_id, 
-                        'created_at': doc.created_at, 
-                        'last_modified': doc.updated_at,
-                        'size_kb': size_in_kb,
-                        'edit_access_entries': edit_access_users,
-                        'read_access_entries': read_access_users}
-                        )
-                else:
-                    document_list.append({
-                        'id': doc.id, 
-                        'title': doc.title, 
-                        'title_manually_set': doc.title_manually_set, 
-                        'user_id': doc.user_id, 
-                        'created_at': doc.created_at, 
-                        'last_modified': doc.updated_at,
-                        'size_kb': size_in_kb,
-                        'edit_access_entries': edit_access_users,
-                        'read_access_entries': read_access_users}
-                        )
+                    doc_info['thumbnail_id'] = doc.thumbnail.id
+
+                document_list.append(doc_info)
 
                
 
