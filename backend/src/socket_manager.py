@@ -253,23 +253,46 @@ class SocketManager:
             # Convert the new content (string) to a Delta object
             new_document_content_delta = string_to_delta(new_document_content)
 
-            # Update the document content in the database
-            document.content = new_document_content_delta.ops
-            db.session.commit()
+            # # Update the document content in the database
+            # document.content = new_document_content_delta.ops
+            # db.session.commit()
 
             # Broadcast the new document content to all clients in the same room
-            self.emit_event(WebSocketEvent('server_sent_document_content', {
+            self.emit_event(WebSocketEvent('server_sent_new_structure', {
                 'documentId': document_id,
                 'title': document.title,
-                'content': document.content
+                'content': new_document_content_delta.ops
             }), room=document_id)
 
-       
-
-        @self._socketio.on('client_structure_removed')
+        @self._socketio.on('client_structure_accepted')
         @Auth.socket_auth_required(emit_event=self.emit_event)
-        def handle_client_structure_removed(user_id):
+        def handle_client_structure_accepted(user_id, data):
             print("Structure removed")
+            if not data or not 'content' in data:
+                self.emit_event(WebSocketEvent('server_error', {'message': 'Missing data'}))
+                return
+            
+            document_id = session.get('document_id')
+            if not data["documentId"] or document_id != data["documentId"]:
+                self.emit_event(WebSocketEvent('server_error', {'message': 'Invalid documentId'}))
+                return
+            
+            # get the current document
+            document = Document.query.get(document_id)
+            if not document:
+                self.emit_event(WebSocketEvent('server_error', {'message': 'Document not found'}))
+                return
+            
+            document.content = data["content"]
+            db.session.commit()
+
+            print("Document content updated")
+            
+
+        @self._socketio.on('client_structure_rejected')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_structure_rejected(user_id, data):
+            print("Structure rejected")
 
         @self._socketio.on('client_chat')
         @Auth.socket_auth_required(emit_event=self.emit_event)
