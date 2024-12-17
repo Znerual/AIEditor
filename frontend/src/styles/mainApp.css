@@ -177,12 +177,34 @@
     transition: opacity 0.3s ease-in-out; /* Smooth appearance */
 }
 
+.upload-thumbnail-icon {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    cursor: pointer;
+    color: #000000; /* Red for delete */
+    z-index: 10;
+    transform: scale(1.5); /* Scale the icon 1.5 times */
+    transform-origin: center; /* Ensure scaling from the center */
+    padding: 4px;
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s ease-in-out; /* Smooth appearance */
+}
+
 .document-card:hover .delete-icon {
+    opacity: 1; /* Visible on hover */
+}
+
+.document-card:hover .upload-thumbnail-icon {
     opacity: 1; /* Visible on hover */
 }
 
 .delete-icon:hover {
     color: #c0392b; /* Darker red on hover */
+}
+
+.upload-thumbnail-icon:hover {
+    color: #2980b9
 }
 
 /* Confirmation Dialog Styles */

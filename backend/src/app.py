@@ -4,7 +4,7 @@ from datetime import datetime
 import hashlib
 import subprocess
 import uuid
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from config import Config
@@ -18,14 +18,16 @@ import queue
 import config
 from delta import Delta
 import os
+import io
 import tempfile
 from fileProcessor import FileProcessor
-from models import db, User, Document, DocumentReadAccess, DocumentEditAccess, FileContent, FileEmbedding, SequenceEmbedding
+from models import db, User, Document, DocumentReadAccess, DocumentEditAccess, Thumbnail, FileContent, FileEmbedding, SequenceEmbedding
 from sqlalchemy import text
 from auth import Auth
 from werkzeug.utils import secure_filename
 from bs4 import BeautifulSoup
 from sqlalchemy.exc import IntegrityError
+from embedding_manager import EmbeddingManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -145,6 +147,83 @@ class FlaskApp:
                 'user': {'id': existing_user.id, 'email': existing_user.email, 'isAdmin': existing_user.is_admin}
             })
         
+        @self.app.route('/api/thumbnails', methods=['POST'])
+        @Auth.rest_auth_required
+        def create_thumbnail(user_id):
+            data = request.get_json()
+            document_id = data.get('document_id')
+            image_data = data.get('image_data')  # Assuming base64 encoded image
+            #file_format = data.get('file_format', 'PNG')  # Default to PNG
+
+            if not image_data:
+                return jsonify({'message': 'Missing image data'}), 400
+            
+            document = Document.query.get_or_404(document_id)
+
+            try:
+
+                # Create a new thumbnail
+                new_thumbnail = Thumbnail(
+                    image_data=image_data,
+                    document=document
+                )
+
+                db.session.add(new_thumbnail)
+                db.session.commit()
+
+                return jsonify({
+                    'message': 'Thumbnail created successfully',
+                    'thumbnail_id': new_thumbnail.id
+                }), 201
+
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error during thumbnail creation: {e}")
+                return jsonify({'message': 'Thumbnail creation failed'}), 500
+
+        @self.app.route('/api/thumbnails/<int:thumbnail_id>', methods=['GET'])
+        @Auth.rest_auth_required
+        def get_thumbnail(user_id, thumbnail_id):
+            thumbnail = Thumbnail.query.get_or_404(thumbnail_id)
+
+            # Check if the user has access to the document associated with the thumbnail
+            if thumbnail.document:
+                if int(thumbnail.document.user_id) != int(user_id):
+                    # Check if the user has read access to the document
+                    read_access = DocumentReadAccess.query.filter_by(document_id=thumbnail.document.id, user_id=user_id).first()
+                    if not read_access:
+                        edit_access = DocumentEditAccess.query.filter_by(document_id=thumbnail.document.id, user_id=user_id).first()
+                        if not edit_access:
+                            print(f"Access denied for thumbnail {thumbnail_id}, connected to document: {thumbnail.document.id}, which is connected to user {thumbnail.document.user.id}, while we are {user_id}")
+                            return jsonify({'message': 'Access denied'}), 403
+                       
+
+            # Return the thumbnail data
+            return send_file(
+                io.BytesIO(thumbnail.image_data),
+                mimetype=f'image/webp',
+                as_attachment=False
+            )
+
+        @self.app.route('/api/thumbnails/<int:thumbnail_id>', methods=['DELETE'])
+        @Auth.rest_auth_required
+        def delete_thumbnail(user_id, thumbnail_id):
+            thumbnail = Thumbnail.query.get_or_404(thumbnail_id)
+
+            # Check if the user has access to the associated document or is an admin
+            if thumbnail.document:
+                if thumbnail.document.user_id != user_id:
+                    auth_header = request.headers.get('Authorization')
+                    token = auth_header.split(" ")[1]
+                    payload, error = Auth.decode_token(token)
+                    if error or not payload.get('is_admin', False):
+                        return jsonify({'message': 'Access denied'}), 403
+
+            db.session.delete(thumbnail)
+            db.session.commit()
+
+            return jsonify({'message': 'Thumbnail deleted successfully'}), 200
+        
         @self.app.route('/api/user/create_new_document', methods=['POST'])
         @Auth.rest_auth_required
         def handle_client_create_new_document(user_id):
@@ -190,7 +269,85 @@ class FlaskApp:
             for read_access_entry in read_access_entries:
                 all_readable_documents.append(read_access_entry.document)
             
-            return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content} for document in all_readable_documents])
+            documents_data = []
+            for document in all_readable_documents:
+                if document.thumbnail:
+                    documents_data.append({
+                        'id': document.id, 
+                        'thumbnail_id': document.thumbnail.id,
+                        'title': document.title, 
+                        'title_manually_set': document.title_manually_set, 
+                        'user_id': document.user_id, 
+                        'created_at': document.created_at, 
+                        'updated_at': document.updated_at, 
+                        'content': document.content}
+                        )
+                else:
+                    documents_data.append({
+                        'id': document.id, 
+                        'title': document.title, 
+                        'title_manually_set': document.title_manually_set, 
+                        'user_id': document.user_id, 
+                        'created_at': document.created_at, 
+                        'updated_at': document.updated_at, 
+                        'content': document.content}
+                        )
+            return jsonify(documents_data)
+
+        @self.app.route('/api/user/search_documents', methods=['GET'])
+        @Auth.rest_auth_required
+        def search_documents(user_id):
+            search_term = request.args.get('search_term')
+            if not search_term:
+                return jsonify({'message': 'Missing search term'}), 400
+
+            try:
+                print("Searching for documents with term", search_term)
+                documents = Document.query.filter_by(user_id=user_id).all()
+                print("Getting embeddings for user", user_id)
+                user_embeddings = [EmbeddingManager.get_embeddings(doc) for doc in documents]
+                print("Found", len(user_embeddings), "embeddings for user")
+                # Use the embedding manager to find similar documents
+                similar_file_embeddings = EmbeddingManager.find_similar_files(
+                    search_term,
+                    embedding_ids=user_embeddings,
+                    limit=10
+                )
+                print("Found", len(similar_file_embeddings), "similar documents")
+                # Extract the document IDs from the similar file embeddings
+                similar_document_ids = {embedding.document_id for embedding in similar_file_embeddings if embedding.document_id}
+
+                # Fetch the actual documents using the IDs
+                similar_documents = Document.query.filter(Document.id.in_(similar_document_ids)).all()
+
+                documents_data = []
+                for document in similar_documents:
+                    if document.thumbnail:
+                        documents_data.append({
+                            'id': document.id, 
+                            'thumbnail_id': document.thumbnail.id,
+                            'title': document.title, 
+                            'title_manually_set': document.title_manually_set, 
+                            'user_id': document.user_id, 
+                            'created_at': document.created_at, 
+                            'updated_at': document.updated_at, 
+                            'content': document.content}
+                            )
+                    else:
+                        documents_data.append({
+                            'id': document.id, 
+                            'title': document.title, 
+                            'title_manually_set': document.title_manually_set, 
+                            'user_id': document.user_id, 
+                            'created_at': document.created_at, 
+                            'updated_at': document.updated_at, 
+                            'content': document.content}
+                            )
+                return jsonify(documents_data)
+
+            except Exception as e:
+                print(f"Error during document search: {e}")
+                return jsonify({'message': 'Error during document search', 'error': str(e)}), 500
 
         @self.app.route('/api/user/documents', methods=['GET'])
         @Auth.rest_auth_required
@@ -211,7 +368,31 @@ class FlaskApp:
             for edit_access_entry in edit_access_entries:
                 all_usable_documents.append(edit_access_entry.document)
             
-            return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'updated_at': document.updated_at, 'content': document.content} for document in all_usable_documents])
+            documents_data = []
+            for document in all_usable_documents:
+                if document.thumbnail:
+                    documents_data.append({
+                        'id': document.id, 
+                        'thumbnail_id': document.thumbnail.id,
+                        'title': document.title, 
+                        'title_manually_set': document.title_manually_set, 
+                        'user_id': document.user_id, 
+                        'created_at': document.created_at, 
+                        'updated_at': document.updated_at, 
+                        'content': document.content}
+                        )
+                else:
+                    documents_data.append({
+                        'id': document.id, 
+                        'title': document.title, 
+                        'title_manually_set': document.title_manually_set, 
+                        'user_id': document.user_id, 
+                        'created_at': document.created_at, 
+                        'updated_at': document.updated_at, 
+                        'content': document.content}
+                        )
+            return jsonify(documents_data)
+                    
 
         
         @self.app.route('/api/user/document/<document_id>', methods=['DELETE'])
@@ -540,17 +721,34 @@ class FlaskApp:
                 size_in_bytes = size_result[0] if size_result else 0
                 size_in_kb = round(size_in_bytes / 1024.0, 2)
 
-                document_list.append({
-                    'id': doc.id,
-                    'title': doc.title,
-                    'title_manually_set': doc.title_manually_set,
-                    'user_id': doc.user_id,
-                    'created_at': doc.created_at,
-                    'last_modified': doc.updated_at,
-                    'size_kb': size_in_kb,
-                    'edit_access_entries': edit_access_users,
-                    'read_access_entries': read_access_users
-                })
+               
+                if doc.thumbnail:
+                    document_list.append({
+                        'id': doc.id, 
+                        'thumbnail_id': doc.thumbnail.id,
+                        'title': doc.title, 
+                        'title_manually_set': doc.title_manually_set, 
+                        'user_id': doc.user_id, 
+                        'created_at': doc.created_at, 
+                        'last_modified': doc.updated_at,
+                        'size_kb': size_in_kb,
+                        'edit_access_entries': edit_access_users,
+                        'read_access_entries': read_access_users}
+                        )
+                else:
+                    document_list.append({
+                        'id': doc.id, 
+                        'title': doc.title, 
+                        'title_manually_set': doc.title_manually_set, 
+                        'user_id': doc.user_id, 
+                        'created_at': doc.created_at, 
+                        'last_modified': doc.updated_at,
+                        'size_kb': size_in_kb,
+                        'edit_access_entries': edit_access_users,
+                        'read_access_entries': read_access_users}
+                        )
+
+               
 
             return jsonify(document_list)
         
@@ -633,7 +831,25 @@ class FlaskApp:
         @Auth.rest_admin_auth_required
         def get_document(document_id):
             document = Document.query.get_or_404(document_id)
-            return jsonify({'id': document.id, 'title': document.title, 'user_id': document.user_id, 'created_at': document.created_at, 'content': document.content})
+            if document.thumbnail:
+                return jsonify({
+                    'id': document.id, 
+                    'thumbnail_id': document.thumbnail.id,
+                    'title': document.title, 
+                    'title_manually_set': document.title_manually_set,
+                    'user_id': document.user_id, 
+                    'created_at': document.created_at, 
+                    'updated_at': document.updated_at,
+                    'content': document.content})
+            
+            return jsonify({
+                'id': document.id, 
+                'title': document.title, 
+                'title_manually_set': document.title_manually_set,
+                'user_id': document.user_id, 
+                'created_at': document.created_at, 
+                'updated_at': document.updated_at,
+                'content': document.content})
 
         # Get a file content entry
         @self.app.route('/api/admin/file_contents/<int:file_content_id>', methods=['GET'])

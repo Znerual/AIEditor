@@ -3,6 +3,9 @@ from flask_sqlalchemy import SQLAlchemy
 from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
+from PIL import Image
+import io
+import base64
 import json
 from delta import Delta
 db = SQLAlchemy()
@@ -85,11 +88,17 @@ class Document(db.Model):
     content = db.Column(db.JSON, nullable=False, default={})
     created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    embedding_valid = db.Column(db.Boolean, default=False)
     
     # Relationships
     user = db.relationship('User', backref=db.backref('documents', lazy=True))
     read_access_entries = db.relationship('DocumentReadAccess', back_populates='document', lazy='dynamic')
     edit_access_entries = db.relationship('DocumentEditAccess', back_populates='document', lazy='dynamic')
+    file_embedding = db.relationship('FileEmbedding', backref=db.backref('document', lazy=True))
+    thumbnail = db.relationship("Thumbnail", 
+                              uselist=False,  # one-to-one
+                              back_populates="document", 
+                              cascade="all, delete-orphan")  # delete thumbn
 
     def apply_delta(self, delta):
         """Apply a Quill delta to the document content"""
@@ -114,6 +123,7 @@ class Document(db.Model):
         
         # Store the ops array in the content field
         self.content = {'ops': new_content.ops}
+        self.embedding_valid = False
         
         self.updated_at = datetime.now(timezone.utc)
         return new_content.ops
@@ -187,3 +197,38 @@ class SequenceEmbedding(db.Model):
 
     # Relationship to FileEmbedding
     file = db.relationship("FileEmbedding", back_populates="sequences")
+
+class Thumbnail(db.Model):
+    __tablename__ = 'thumbnails'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    document_id = db.Column(db.String(36), db.ForeignKey('documents.id'), nullable=False) 
+    image_data = db.Column(db.LargeBinary, nullable=False)  # Store the image data
+    creation_date = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+
+    # Relationship (one-to-one)
+    document = db.relationship("Document", back_populates="thumbnail")
+
+    def __init__(self, image_data, document):
+        if not document:
+            raise ValueError("Thumbnail must be associated with a document")
+        self.document = document
+        
+        if isinstance(image_data, str):
+          image_data = base64.b64decode(image_data)
+
+        try:
+            img = Image.open(io.BytesIO(image_data))
+        except Exception as e:
+            raise ValueError(f"Invalid image data: {e}")
+
+        img.thumbnail((128, 128))
+
+        # Convert to RGB if necessary
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        # Save the resized image as WEBP
+        with io.BytesIO() as output:
+            img.save(output, format="WEBP")
+            self.image_data = output.getvalue()
