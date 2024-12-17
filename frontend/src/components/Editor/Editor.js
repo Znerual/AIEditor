@@ -608,22 +608,22 @@ export const Editor = ({ documentId }) => {
                         theme="bubble"
                         />
                         <div className="button-group">
-                        <Button variant="success" onClick={handleAcceptStructure}>
+                        <Button className="accept" variant="success" onClick={handleAcceptStructure}>
                             <Check className="h-4 w-4 mr-2" /> Accept
                         </Button>
-                        <Button variant="destructive" onClick={handleRejectStructure}>
+                        <Button className="reject" variant="destructive" onClick={handleRejectStructure}>
                             <X className="h-4 w-4 mr-2" /> Reject
                         </Button>
                         </div>
                     </div>
                 )}
 
-                {process.env.REACT_APP_DEBUG_PANE && (
+                {/* {process.env.REACT_APP_DEBUG_PANE && (
                     <DebugPanel 
                         events={debugEvents}
                         socketStatus={status}
                     />
-                )}
+                )} */}
             </div>
         </div>
     );
