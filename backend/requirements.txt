@@ -14,3 +14,4 @@ pgvector
 textract
 pdfminer
 setuptools
+Pillow
