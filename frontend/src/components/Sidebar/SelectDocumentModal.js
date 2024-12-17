@@ -8,7 +8,7 @@ export const SelectDocumentModal = ({ isOpen, onClose, onSelect, token }) => {
     useEffect(() => {
         const fetchDocuments = async () => {
             try {
-                const response = await fetch('http://localhost:5000/api/user/read_documents', {
+                const response = await fetch('http://localhost:5000/api/user/documents', {
                     headers: { 'Authorization': `Bearer ${token}` },
                 });
                 if (!response.ok) {
