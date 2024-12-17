@@ -10,6 +10,8 @@ import { ChatWindow } from '../../components/Chat/ChatWindow';
 import { DebugPanel } from '../../components/Debug/DebugPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import 'react-quill/dist/quill.snow.css';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 // Import CSS files
 import '../../styles/components.css';
@@ -21,6 +23,8 @@ Quill.register(SuggestionBlot);
 
 export const Editor = ({ documentId }) => {
     // State management
+    const [showAlert, setShowAlert] = useState(false);
+    const [ alertMessage, setAlertMessage ] = useState('');
     const [uploadedStructureFile, setUploadedStructureFile] = useState(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [debugEvents, setDebugEvents] = useState([]);
@@ -79,11 +83,15 @@ export const Editor = ({ documentId }) => {
         setEditorContent(newContent);
     }, []);
 
-    const handleStructureUpload = useCallback((file) => {
-        console.log("Handling structure upload", file);
-        setUploadedStructureFile(file);
-        // Implementation for structure upload
-    }, []);
+    const handleStructureUpload = useCallback(async (data) => {
+        console.log("Handling structure upload", data);
+        if (data) {
+            emit('client_structure_uploaded', data);
+        } else {
+            emit('client_structure_removed');
+        }
+        
+      }, []);
 
     const handleContentUpload = useCallback((extractedContent) => {
         // Update state with extracted content
@@ -527,7 +535,6 @@ export const Editor = ({ documentId }) => {
                         <StructurUpload
                             title="Structure Template" 
                             onUpload={handleStructureUpload}
-                            uploadedFile={uploadedStructureFile}
                         />
                         <ContentUpload
                             key="content-upload"
