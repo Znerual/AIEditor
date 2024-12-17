@@ -81,7 +81,27 @@
   display: flex;
   align-items: center;
   cursor: pointer;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
 }
+
+.file-item span:first-child {
+  flex: 1;
+  min-width: 0; /* Allow the flex item to shrink below its content size */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Style for the remove button */
+.file-remove-button {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0; /* Prevent the button from shrinking */
+  padding: 0.25rem;
+}
+
 
 .file-checkbox {
   margin-right: 0.5rem;

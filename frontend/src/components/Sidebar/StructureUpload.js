@@ -54,6 +54,7 @@ export const StructurUpload = ({ title, onUpload }) => {
             const result = data.results[0];
             if (result.success) {
               onUpload(result);
+              setSelectedFile(result);
             } else {
               console.error('Error processing file:', result.error);
             }
@@ -94,6 +95,7 @@ export const StructurUpload = ({ title, onUpload }) => {
             const result = data.results[0];
             if (result.success) {
               onUpload(result);
+              setSelectedFile(result);
             } else {
               console.error('Error processing file:', result.error);
             }
@@ -141,6 +143,7 @@ export const StructurUpload = ({ title, onUpload }) => {
             const text = await documentParser.readDocument(document);
             const result = { filename: id, raw:document.content, file_id: document.id, success: true, text_extracted: text, message: 'Document extracted', content_type: 'document' };
             onUpload(result);
+            setSelectedFile(result);
         } catch (error) {
             console.error("Error extracting text from Document", document.id, error);
         }
@@ -170,6 +173,7 @@ export const StructurUpload = ({ title, onUpload }) => {
             }
             
             onUpload(data);
+            setSelectedFile(data);
           } catch (error) {
               console.error("Error extracting text from Website", url, error);
           }  
@@ -192,6 +196,7 @@ export const StructurUpload = ({ title, onUpload }) => {
                 content_type: 'file_content',
               };
               onUpload(newFile);
+              setSelectedFile(newFile);
           } catch (error) {
             console.error("Error adding content", content, error);
           }
@@ -254,7 +259,7 @@ export const StructurUpload = ({ title, onUpload }) => {
                             )}
                             {selectedFile && (
                                 <div className="file-item" onClick={handleFileClick}>
-                                    <span>{selectedFile.name}</span>
+                                    <span>{selectedFile.filename}</span>
                                     <span className="file-remove-button" onClick={handleRemoveFile}>
                                         <X size={20} />
                                     </span>
