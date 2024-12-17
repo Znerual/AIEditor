@@ -2,9 +2,9 @@
 .app-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    background-color: white;
-    font-family: 'Arial', sans-serif;
+    min-height: 100vh;
+    background-color: #f4f8fb; /* Light blue background */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .main-header {
@@ -13,79 +13,95 @@
     align-items: center;
     margin-bottom: 20px;
     width: 100%;
-    padding: 0 20px;
+    padding: 20px;
     box-sizing: border-box;
+    background-color: #fff; /* White background for header */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
 }
 
 .container {
-    width: 100%; /* Make the container take the full width */
-    max-width: 100%; /* Remove any max-width limitations */
-    margin: 0; /* Remove default margins */
-    padding: 20px; /* Add padding to the container */
-    box-sizing: border-box; /* Include padding in the container's width */
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 .search-input {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 20px; /* Rounded corners */
     font-size: 16px;
     flex-grow: 1;
     margin-left: 20px;
+    background-color: #e8f0fe; /* Light blue input field */
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1); /* Inset shadow for depth */
+    color: #333;
+}
+
+.search-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px #a7d9ed; /* Highlight on focus */
 }
 
 .document-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 20px;
-    width: 100%; /* Ensure the grid takes up the full width of its container */
+    width: 100%;
     box-sizing: border-box;
 }
 
 .document-card {
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    background-color: #f8f8f8;
+    border: none;
+    border-radius: 10px;
+    background-color: #fff;
     cursor: pointer;
-    transition: box-shadow 0.2s ease-in-out;
+    transition: box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
     height: 350px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Soft shadow */
+    position: relative; /* For absolute positioning of delete icon */
 }
 
 .document-card:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px); /* Slightly lift the card */
 }
 
 .document-preview {
     flex: 1;
-    background-color: #e0e0e0;
-    border-bottom: 1px solid #ccc;
+    background-color: #e8f0fe; /* Light blue preview */
+    border-bottom: 1px solid #cce0f5;
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 150px;
     overflow: hidden;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
 }
 
 .preview-image {
-    /* Placeholder for document preview - replace with actual preview logic */
+    /* Placeholder for document preview */
     width: 80%;
     height: 80%;
-    background-color: #d0d0d0;
+    background-color: #cce0f5; /* Slightly darker blue */
 }
 
 .document-info {
     padding: 15px;
 }
 
-.document-item h2 {
+.document-info h2 {
     margin-top: 0;
     margin-bottom: 5px;
     font-size: 1.2rem;
+    color: #282c34; /* Dark gray for text */
 }
 
-.document-item p {
+.document-info p {
     margin: 5px 0;
     font-size: 0.9rem;
     color: #555;
@@ -102,18 +118,38 @@
 }
 
 .create-new-document-button {
-    background-color: #007bff;
+    background-color: #3498db; /* Modern blue */
     color: white;
     border: none;
     padding: 10px 20px;
-    border-radius: 5px;
+    border-radius: 20px; /* Rounded corners */
     font-size: 16px;
     cursor: pointer;
-    transition: background-color 0.2s ease-in-out;
+    transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
 }
 
 .create-new-document-button:hover {
-    background-color: #0056b3;
+    background-color: #2980b9; /* Darker blue on hover */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.search-mode-button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-left: 10px; /* Add some space between buttons */
+}
+
+.search-mode-button:hover {
+    background-color: #2980b9;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .loading,
@@ -123,5 +159,88 @@
 }
 
 .error {
-    color: red;
+    color: #e74c3c; /* Red for errors */
+}
+
+/* Delete Icon Styles */
+.delete-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+    color: #e74c3c; /* Red for delete */
+    z-index: 10;
+    transform: scale(2); /* Scale the icon 1.5 times */
+    transform-origin: center; /* Ensure scaling from the center */
+    padding: 4px;
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s ease-in-out; /* Smooth appearance */
+}
+
+.document-card:hover .delete-icon {
+    opacity: 1; /* Visible on hover */
+}
+
+.delete-icon:hover {
+    color: #c0392b; /* Darker red on hover */
+}
+
+/* Confirmation Dialog Styles */
+.confirmation-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.confirmation-dialog-content {
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.confirmation-dialog-buttons {
+    margin-top: 20px;
+    display: flex;
+    justify-content: space-around;
+}
+
+.confirm-delete,
+.cancel-delete {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease-in-out;
+}
+
+.confirm-delete {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.cancel-delete {
+    background-color: #3498db; /* Blue for cancel */
+    color: white;
+}
+
+.confirm-delete:hover {
+    background-color: #c0392b;
+}
+
+.cancel-delete:hover {
+    background-color: #2980b9;
+}
+.document-card-clickable {
+    cursor: pointer;
+    height: 100%;
 }
