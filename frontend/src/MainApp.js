@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Upload } from 'lucide-react';
+import { Plus, Trash2, Upload, Users } from 'lucide-react';
 import './styles/mainApp.css'; // Make sure to create this CSS file
 import { Button } from './components/ui/button';
+
 
 export const MainApp = () => {
     const [documents, setDocuments] = useState([]);
@@ -14,6 +15,10 @@ export const MainApp = () => {
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [documentToDelete, setDocumentToDelete] = useState(null);
     const [thumbnailURLs, setThumbnailURLs] = useState({}); // Store object URLs for thumbnails
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [selectedDocumentId, setSelectedDocumentId] = useState(null);
+    const [newCollaboratorEmail, setNewCollaboratorEmail] = useState('');
+    const [collaboratorRights, setCollaboratorRights] = useState('read');
     const { token } = useAuth();
     const fileInputRef = useRef(null);
     const navigate = useNavigate();
@@ -204,6 +209,46 @@ export const MainApp = () => {
         }
     };
 
+    const handleShareDocument = (documentId) => {
+        setSelectedDocumentId(documentId);
+        setIsShareModalOpen(true);
+    };
+
+    const handleAddCollaborator = async () => {
+        // Send request to backend to add collaborator
+        try {
+            const response = await fetch(`http://localhost:5000/api/documents/${selectedDocumentId}/collaborators`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                email: newCollaboratorEmail,
+                rights: collaboratorRights,
+            }),
+            });
+
+            if (!response.ok) {
+            throw new Error('Failed to add collaborator');
+            }
+
+            // Handle successful addition
+            console.log('Collaborator added successfully');
+            // Optionally close the modal and refresh the document list
+            setIsShareModalOpen(false);
+
+            // Clear the form fields
+            setNewCollaboratorEmail('');
+            setCollaboratorRights('read');
+            // Refresh the document list or update the specific document's collaborator list
+        } catch (error) {
+            console.error('Error adding collaborator:', error);
+            // Handle error
+        }
+    };
+
+
     return (
         <div className="app-container">
             <div className="main-header">
@@ -248,6 +293,13 @@ export const MainApp = () => {
                                     onClick={(e) => {
                                         e.stopPropagation(); // Prevent card click
                                         handleDeleteClick(doc.id);
+                                    }}
+                                />
+                                <Users
+                                    className="share-icon"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleShareDocument(doc.id);
                                     }}
                                 />
                                 <div className='document-card-clickable' onClick={() => handleDocumentSelect(doc.id)}>
@@ -298,6 +350,49 @@ export const MainApp = () => {
                             <div className='confirmation-dialog-buttons'>
                                 <button onClick={confirmDelete} className='confirm-delete'>Yes</button>
                                 <button onClick={cancelDelete} className='cancel-delete'>No</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* Share Modal */}
+                {isShareModalOpen && (
+                    <div className="modal-backdrop">
+                        <div className="modal-content">
+                            <h2>Share Document</h2>
+
+                            {/* Email Input */}
+                            <div className="input-group">
+                                <label htmlFor="collaborator-email">Collaborator's Email:</label>
+                                <input
+                                    type="email"
+                                    id="collaborator-email"
+                                    value={newCollaboratorEmail}
+                                    onChange={(e) => setNewCollaboratorEmail(e.target.value)}
+                                    placeholder="Enter collaborator's email"
+                                />
+                            </div>
+
+                            {/* Rights Selection */}
+                            <div className="input-group">
+                                <label htmlFor="collaborator-rights">Access Rights:</label>
+                                <select
+                                    id="collaborator-rights"
+                                    value={collaboratorRights}
+                                    onChange={(e) => setCollaboratorRights(e.target.value)}
+                                >
+                                    <option value="read">Read</option>
+                                    <option value="edit">Edit</option>
+                                </select>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="modal-buttons">
+                                <button onClick={handleAddCollaborator} className="modal-add-button">
+                                    Add Collaborator
+                                </button>
+                                <button onClick={() => setIsShareModalOpen(false)} className="modal-close-button">
+                                    Cancel
+                                </button>
                             </div>
                         </div>
                     </div>
