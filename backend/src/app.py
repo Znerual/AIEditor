@@ -2,6 +2,7 @@
 import base64
 from datetime import datetime
 import hashlib
+import subprocess
 import uuid
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -18,6 +19,7 @@ import config
 from delta import Delta
 import os
 import tempfile
+from fileProcessor import FileProcessor
 from models import db, User, Document, DocumentReadAccess, DocumentEditAccess, FileContent, FileEmbedding, SequenceEmbedding
 from sqlalchemy import text
 from auth import Auth
@@ -55,6 +57,9 @@ class FlaskApp:
         # Init the temporary directory
         if not os.path.exists(Config.TMP_PATH):
             os.makedirs(Config.TMP_PATH)
+        
+        # Initialize the file processor
+        self.file_processor = FileProcessor(Config.TMP_PATH)
 
         self.message_queue = queue.Queue() # Create the message queue
         self.socket_manager = SocketManager()
@@ -208,6 +213,23 @@ class FlaskApp:
             
             return jsonify([{'id': document.id, 'title': document.title, 'title_manually_set': document.title_manually_set, 'user_id': document.user_id, 'created_at': document.created_at, 'updated_at': document.updated_at, 'content': document.content} for document in all_usable_documents])
 
+        
+        @self.app.route('/api/user/document/<document_id>', methods=['DELETE'])
+        @Auth.rest_auth_required
+        def delete_document_user(user_id, document_id):
+            print("Deleting document", document_id, "for user", user_id)
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+            
+            document = Document.query.filter_by(user_id=user_id, id=document_id).first()
+            if not document:
+                return jsonify({'message': 'Document not found'}), 404
+            
+            db.session.delete(document)
+            db.session.commit()
+            return jsonify({'message': 'Document deleted'}), 200
+            
+        
         @self.app.route('/api/fetch-website', methods=['GET'])
         @Auth.rest_auth_required
         def fetch_website():
@@ -371,17 +393,10 @@ class FlaskApp:
                         
                         # Try to extract text content if possible
                         try:
-                            temp_file_path = os.path.join(Config.TMP_PATH, filename)
-                            with open(temp_file_path, 'wb') as temp_file:
-                                temp_file.write(content)
+                            file_content_data = self.file_processor.process_file_content(filename, content)
                             
-                            # Process the file with textact (implement your processing logic here)
-                            extracted_text = textract.process(temp_file_path).decode()
-                            os.remove(temp_file_path)
-                            text_content_hash = hashlib.sha256(extracted_text.encode()).hexdigest()
-                            
-                            file_content.text_content = extracted_text
-                            file_content.text_content_hash = text_content_hash
+                            file_content.text_content = file_content_data['text_content']
+                            file_content.text_content_hash = file_content_data['text_content_hash']
                         except Exception as text_error:
                             # If text extraction fails, continue without text content
                             print(f"Text extraction failed: {str(text_error)}")
@@ -459,14 +474,44 @@ class FlaskApp:
             # Serve the file from the temporary directory
             return jsonify(content_data)
 
-        # def setup_embeddings_routes(app):
-        # @self.app.route('/api/embeddings', methods=['POST'])
-        # def create_embedding_route():
-        #     data = request.get_json()
-        #     request_data = FileEmbeddingRequest(filepath=data['filepath'], content=data['content'])
-        #     store_file_embedding(request_data.filepath, request_data.content)
-        #     return jsonify({'message': 'Embedding stored successfully'}), 201
-
+        @self.app.route('/api/upload_structure', methods=['POST'])
+        @Auth.rest_auth_required
+        def handle_structure_upload(user_id):
+            if 'file' not in request.files:
+                return jsonify({'message': 'No file part'}), 400
+            
+            file = request.files['file']
+            
+            if file.filename == '':
+                return jsonify({'message': 'No selected file'}), 400
+            
+            if file:
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(Config.TMP_PATH, filename)
+                file.save(filepath)
+                
+                try:
+                    # Convert the document to Markdown using Pandoc
+                    result = subprocess.run(
+                        ['pandoc', filepath, '-t', 'markdown', '--toc', '--normalize'],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    markdown_content = result.stdout
+                    
+                    # Optionally, remove the temporary file
+                    os.remove(filepath)
+                    
+                    return jsonify({
+                        'message': 'Document converted successfully',
+                        'markdown': markdown_content
+                    }), 200
+                except subprocess.CalledProcessError as e:
+                    print("Error ", e)
+                    return jsonify({'message': 'Failed to convert document', 'error': str(e)}), 500
+            
+            return jsonify({'message': 'Failed to upload file'}), 500
         # Admin routes
         @self.app.route('/api/admin', methods=['GET'])
         @Auth.rest_admin_auth_required
