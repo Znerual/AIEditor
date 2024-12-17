@@ -3,7 +3,6 @@ import { useAuth } from './contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Upload, Users } from 'lucide-react';
 import './styles/mainApp.css'; // Make sure to create this CSS file
-import { Button } from './components/ui/button';
 
 
 export const MainApp = () => {
@@ -154,7 +153,7 @@ export const MainApp = () => {
         };
     }, [documents, fetchThumbnail]);
 
-    const filteredDocuments = (searchMode == 'keyword' ? 
+    const filteredDocuments = (searchMode === 'keyword' ? 
         documents.filter(doc =>
         doc.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (doc.title && doc.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
