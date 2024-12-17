@@ -244,8 +244,17 @@ class EmbeddingManager:
         logging.info(f"Getting embeddings for text: {text[:50]}...")
         
         sequences = EmbeddingManager._split_text(text)
-        sequence_hashes = [EmbeddingManager._calculate_hash(slice) for slice in sequences]
-
+        sequence_hashes = []
+        sequence_hash_set = set()
+        for i, sequence in enumerate(sequences):
+            sequence_hash = EmbeddingManager._calculate_hash(sequence)
+            if sequence_hash in sequence_hash_set:
+                logging.info(f"Skipping duplicate sequence: {sequence[:50]}... (hash: {sequence_hash})")
+                sequences.pop(i)
+                continue
+            sequence_hashes.append(sequence_hash)
+            sequence_hash_set.add(sequence_hash)
+    
         total_embeddings = []
         missing_sequences_with_hashes = []
         
@@ -279,10 +288,10 @@ class EmbeddingManager:
     def _get_document_embeddings(document : Document) -> FileEmbedding:
         """Get the embedding for a document."""
         logging.info(f"Getting embeddings for document: {document.id} ({document.title})")
-
-        if document.file_embeddings.first():
+        existing_file_embedding = document.file_embedding
+        if existing_file_embedding and document.embedding_valid:
             logging.info(f"Embeddings found in database for document: {document.id}")
-            return document.file_embeddings.first().id
+            return document.file_embedding.id
 
         document_content_string = delta_to_string(document.get_current_delta())
 
@@ -296,26 +305,28 @@ class EmbeddingManager:
             Document.id != document.id  # Exclude the current document
         ).first()
 
-        if same_content_document and same_content_document.file_embeddings.first():
+        
+
+        if same_content_document and same_content_document.file_embedding and same_content_document.embedding_valid:
             logging.info(f"Found existing embeddings with same content hash for document: {same_content_document.id}. Copying embeddings...")
-            new_document_embedding = FileEmbedding(document=document)
-            db.session.add(new_document_embedding)
-            for sequence in same_content_document.file_embeddings.first().sequences:
-                new_sequence_embedding = SequenceEmbedding(
-                    sequence_hash=sequence.sequence_hash,
-                    sequence_text=sequence.sequence_text,
-                    embedding=sequence.embedding,
-                    file=new_document_embedding
-                )
-                db.session.add(new_sequence_embedding)
-            
-            db.session.flush()
+            document.file_embedding = same_content_document.file_embedding
+            document.embedding_valid = True
+            db.session.commit()
             logging.info(f"Embeddings copied successfully for document: {document.id}")
-            return new_document_embedding.id
+            return document.file_embedding.id
 
         # Proceed with generating new embeddings
         sequences = EmbeddingManager._split_text(document_content_string)
-        sequence_hashes = [EmbeddingManager._calculate_hash(slice) for slice in sequences]
+        sequence_hashes = []
+        sequence_hash_set = set()
+        for i, sequence in enumerate(sequences):
+            sequence_hash = EmbeddingManager._calculate_hash(sequence)
+            if sequence_hash in sequence_hash_set:
+                logging.info(f"Skipping duplicate sequence: {sequence[:50]}... (hash: {sequence_hash})")
+                sequences.pop(i)
+                continue
+            sequence_hashes.append(sequence_hash)
+            sequence_hash_set.add(sequence_hash)
         logging.info(f"Calculated {len(sequence_hashes)} hashes for sequences")
 
         # remove duplicate sequences from the list by analyzing the hash
@@ -324,6 +335,10 @@ class EmbeddingManager:
         new_document_embedding = FileEmbedding(document=document)
         db.session.add(new_document_embedding)
         db.session.flush()
+
+        document.file_embedding = new_document_embedding
+        document.embedding_valid = True
+        db.session.commit()
 
         total_sequences = []
         missing_sequences_with_hashes = set()
@@ -436,7 +451,7 @@ class EmbeddingManager:
         seen_file_ids = set()
         for sequence in similar_sequences:
             if sequence.file_id not in seen_file_ids:
-                results.append(sequence.file)
+                results.append(sequence.file_id)
                 seen_file_ids.add(sequence.file_id)
                 if len(results) >= limit:
                     break
