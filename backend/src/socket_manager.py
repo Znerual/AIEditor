@@ -9,12 +9,13 @@ from dialog_manager import DialogManager
 from structure_manager import StructureManager
 from auth import Auth
 from functools import partial
+from models import User, Document, DocumentEditAccess,DocumentReadAccess
 from concurrent.futures import ThreadPoolExecutor
 from models import Document, db
 
 from delta import Delta
 import uuid
-from utils import delta_to_string, string_to_delta
+from utils import string_to_delta
 import threading
 from config import Config
 
@@ -83,14 +84,32 @@ class SocketManager:
                 # Store the document ID in the session for this client
                 session['document_id'] = document_id
 
+
                 # Join the room specific to the document ID
                 join_room(document_id)
 
                 document = Document.query.filter_by(id=document_id, user_id=user_id).first()
                 if not document:
+                    # fix for documents with read or edit righs only
                     self.emit_event(WebSocketEvent('server_error', {'message': f"Document not found: {document_id}"}))
                     return
                 
+                # get the access rights for the file
+                if int(user_id) == int(document.user_id):
+                    session['access_rights'] = 'owner'
+                else:
+                    edit_access_users = User.query.join(DocumentEditAccess, DocumentEditAccess.user_id == User.id).filter(DocumentEditAccess.document_id == document.id, DocumentEditAccess.user_id == user_id).first()
+                    if edit_access_users:
+                        session['access_rights'] = 'edit'
+                    else:
+                        read_access_users = User.query.join(DocumentReadAccess, DocumentReadAccess.user_id == User.id).filter(DocumentReadAccess.document_id == document.id, DocumentReadAccess.user_id == user_id).first()
+                        if read_access_users:
+                            session['access_rights'] = 'read'
+                        else:
+                            session['access_rights'] = 'unauthorized'
+                            print(f"WARNING! Client {user_id} tries to get unauthorized access to document {document_id}.")
+                            return
+                        
                 content = DocumentManager.get_document_content(document)
                 self.emit_event(WebSocketEvent('server_sent_document_content', {
                     'documentId': document_id,
@@ -111,7 +130,9 @@ class SocketManager:
                 if not all([document_id, delta]):
                     raise ValueError("Missing required fields documentId or delta in handle_text_change")
                 
-
+                if not session['access_rights'] in ["owner", "edit"]:
+                    self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
+                    return
                 # User ID comes from the token, not the request
                 updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
                 
@@ -132,6 +153,10 @@ class SocketManager:
                 request_id = data.get('requestId')
                 if not all([document_id, request_id]):
                     raise ValueError("Missing required fields documentId and requestId in handle_text_change")
+                
+                if not session['access_rights'] in ["owner", "edit"]:
+                    self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
+                    return
                 
                 document = Document.query.get(document_id)
                 if not document:
@@ -185,6 +210,10 @@ class SocketManager:
                 if not all([document_id, title]):
                     raise ValueError("Missing required fields documentId and title in handle_title_change")
                 
+                if not session['access_rights'] in ["owner", "edit"]:
+                    self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
+                    return
+                
                 document = Document.query.get(document_id)
                 if not document:
                     raise ValueError("Document not found")
@@ -206,12 +235,18 @@ class SocketManager:
         def handle_client_content_changes(user_id, data):
             print("Content uploaded or selection changed")
             print(data)
+            if not session['access_rights'] in ["owner", "edit"]:
+                self.emit_event(WebSocketEvent('error', {'message' : 'No rights to upload content'}))
+                return
             self.current_content_selection = [item for item in data if 'file_id' in item and 'content_type' in item]  
             self._autocomplete_manager.on_user_content_change(user_id, self.current_content_selection)
 
         @self._socketio.on('client_structure_uploaded')
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_structure_uploaded(user_id, data):
+            if not session['access_rights'] in ["owner", "edit"]:
+                self.emit_event(WebSocketEvent('error', {'message' : 'No rights to change structure'}))
+                return
             print("Structure uploaded")
             if not data:
                 self.emit_event(WebSocketEvent('server_error', {'message': 'Missing data'}))
@@ -267,6 +302,11 @@ class SocketManager:
         @self._socketio.on('client_structure_accepted')
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_structure_accepted(user_id, data):
+
+            if not session['access_rights'] in ["owner", "edit"]:
+                self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
+                return
+            
             print("Structure removed")
             if not data or not 'content' in data:
                 self.emit_event(WebSocketEvent('server_error', {'message': 'Missing data'}))
@@ -300,10 +340,17 @@ class SocketManager:
             document_id = session.get('document_id')  # Get document_id from session
             response_data = self._dialog_manager.get_response(user_id, msg['text'], document_id, self.current_content_selection)
 
+            # TODO, how to deal with chat if only read access is given?
+            # Maybe allow chat, but no edits
             # Emit response and suggested edits
+            if session['access_rights'] in ["owner", "edit"]:
+                suggested_edits =  response_data["suggested_edits"]
+            else:
+                suggested_edits = []
+            
             self.emit_event(WebSocketEvent("server_chat_answer", {
                 "response": response_data["response"],
-                "suggested_edits": response_data["suggested_edits"]
+                "suggested_edits": suggested_edits,
             }))
 
         @self._socketio.on('client_apply_edit')
@@ -312,6 +359,10 @@ class SocketManager:
             document_id = session.get('document_id')
             edit_id = data.get("edit_id")
             accepted = data.get("accepted")
+
+            if not session['access_rights'] in ["owner", "edit"]:
+                self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
+                return
 
             if document_id is None or edit_id is None or accepted is None:
                 self.emit_event(WebSocketEvent("server_error", {"message": "Invalid edit request"}))
