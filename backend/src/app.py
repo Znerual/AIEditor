@@ -161,7 +161,7 @@ class FlaskApp:
             document = Document.query.filter_by(id=document_id).first()
             if not document:
                 return jsonify({'message': 'Document not found'}), 404
-            if document.user_id != user_id:
+            if int(document.user_id) != int(user_id):
                 return jsonify({'message': 'Only the document owner can add collaborators'}), 403
 
             # Check if the collaborator exists
@@ -418,10 +418,10 @@ class FlaskApp:
             for document in unique_documents:
                 # Determine the access level for this user
                 access_level = 'owner'
-                if document.user_id != user_id:
-                    if any(entry.user_id == user_id for entry in document.edit_access_entries):
+                if int(document.user_id) != int(user_id):
+                    if any(int(entry.user_id) == int(user_id) for entry in document.edit_access_entries):
                         access_level = 'edit'
-                    elif any(entry.user_id == user_id for entry in document.read_access_entries):
+                    elif any(int(entry.user_id) == int(user_id) for entry in document.read_access_entries):
                         access_level = 'read'
                 
                 
