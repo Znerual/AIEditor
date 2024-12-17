@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import './styles/mainApp.css'; // Make sure to create this CSS file
 
 export const MainApp = () => {
@@ -10,6 +10,8 @@ export const MainApp = () => {
     const [error, setError] = useState(null);
     const [searchMode, setSearchMode] = useState('keyword'); // 'keyword' or 'embedding'
     const [searchTerm, setSearchTerm] = useState('');
+    const [showConfirmation, setShowConfirmation] = useState(false);
+    const [documentToDelete, setDocumentToDelete] = useState(null);
     const { token } = useAuth();
     const navigate = useNavigate();
 
@@ -35,6 +37,38 @@ export const MainApp = () => {
             console.error('Error creating new document:', error);
         }
     }, [navigate, token]);
+
+    const handleDeleteClick = (documentId) => {
+        setDocumentToDelete(documentId);
+        setShowConfirmation(true);
+    };
+
+    const confirmDelete = async () => {
+        try {
+            const response = await fetch(`http://localhost:5000/api/user/document/${documentToDelete}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+            if (!response.ok) {
+                throw new Error('Failed to delete document');
+            }
+            // Remove the deleted document from the state
+            setDocuments(documents.filter(doc => doc.id !== documentToDelete));
+            setShowConfirmation(false);
+            setDocumentToDelete(null);
+        } catch (error) {
+            console.error('Error deleting document:', error);
+            setError(error.message)
+        }
+    };
+
+    const cancelDelete = () => {
+        setShowConfirmation(false);
+        setDocumentToDelete(null);
+    };
+
 
     useEffect(() => {
         const fetchDocuments = async () => {
@@ -95,26 +129,48 @@ export const MainApp = () => {
                 {!loading && !error && (
                     <div className="document-grid">
                         {filteredDocuments.map(doc => (
-                            <div key={doc.id} className="document-card" onClick={() => handleDocumentSelect(doc.id)}>
-                                <div className="document-preview">
-                                    {/* Placeholder for document preview image */}
-                                    <div className="preview-image"></div>
-                                </div>
-                                <div className="document-info">
-                                    <h2>{doc.title}</h2>
-                                    {!doc.title && <p>ID: {doc.id}</p>}
-                                    <p>Created: {new Date(doc.created_at).toLocaleString()}</p>
-                                    <p>Modified: {new Date(doc.updated_at).toLocaleString()}</p>
-                                    <p>User ID: {doc.user_id}</p>
-                                    <div className='document-collaborators'>
-                                        <p>Collaborators:</p>
-                                        <div className='collaborators-list'>
-                                            {/* Map over collaborators when available */}
+                            <div key={doc.id} className="document-card">
+                                {/* Delete Icon */}
+                                <Trash2
+                                    className="delete-icon"
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Prevent card click
+                                        handleDeleteClick(doc.id);
+                                    }}
+                                />
+                                <div className='document-card-clickable' onClick={() => handleDocumentSelect(doc.id)}>
+                                    <div className="document-preview">
+                                        {/* Placeholder for document preview image */}
+                                        <div className="preview-image"></div>
+                                    </div>
+                                    <div className="document-info">
+                                        <h2>{doc.title}</h2>
+                                        {!doc.title && <p>ID: {doc.id}</p>}
+                                        <p>Created: {new Date(doc.created_at).toLocaleString()}</p>
+                                        <p>Modified: {new Date(doc.updated_at).toLocaleString()}</p>
+                                        <p>User ID: {doc.user_id}</p>
+                                        <div className='document-collaborators'>
+                                            <p>Collaborators:</p>
+                                            <div className='collaborators-list'>
+                                                {/* Map over collaborators when available */}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         ))}
+                    </div>
+                )}
+                {/* Confirmation Dialog */}
+                {showConfirmation && (
+                    <div className="confirmation-dialog">
+                        <div className="confirmation-dialog-content">
+                            <p>Are you sure you want to delete this document?</p>
+                            <div className='confirmation-dialog-buttons'>
+                                <button onClick={confirmDelete} className='confirm-delete'>Yes</button>
+                                <button onClick={cancelDelete} className='cancel-delete'>No</button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
