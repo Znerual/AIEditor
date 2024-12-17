@@ -158,7 +158,7 @@ class SocketManager:
                 print(f"Title Mnaually set: {document.title_manually_set}, len content string: {len(content_str)}")
 
                 # Generate a title for the document
-                if not document.title_manually_set and len(content_str) > Config.TITLE_DOCUMENT_LENGTH_THRESHOLD:
+                if not document.title and not len(document.title) > 3 and not document.title_manually_set and len(content_str) > Config.TITLE_DOCUMENT_LENGTH_THRESHOLD:
                     print("Generating title")
                     title = self._autocomplete_manager.generate_title(content_str)
                     if title:
