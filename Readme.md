@@ -58,6 +58,10 @@ sudo apt-get install python3-dev libxml2-dev libxslt1-dev antiword unrtf poppler
 flac ffmpeg lame libmad0 libsox-fmt-mp3 sox libjpeg-dev swig ghostscript pstotext
 ```
 
+Next, install texlive for pandoc and then pandoc itself:
+```bash
+sudo apt-get install texlive pandoc
+ ``
 
 > Note: For Ubuntu 24.04, there is no recompiled pstotext available. Therefore, we need to build it from source.
 > Install build dependencies:
@@ -179,7 +183,7 @@ npm install @radix-ui/react-icons
 
 ```bash
 npx shadcn-ui@0.8.0 init
-npx shadcn-ui@0.8.0 add button card menubar collapsible input label
+npx shadcn-ui@0.8.0 add button card menubar collapsible input label dialog alert
 ```
 
 2. Update aliases in the `components.json` file to:
