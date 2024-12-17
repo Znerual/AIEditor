@@ -28,6 +28,12 @@
     align-items: center;
     gap: 0.5rem;
   }
+
+  .menubar-actions .home-button {
+    transform: scale(1.25); /* Scale the icon 1.5 times */
+    transform-origin: center; /* Ensure scaling from the center */
+    border-radius: 50%; /* Round the icon corners */
+  }
   
   /* Title label and input styles */
   .document-title-label {
