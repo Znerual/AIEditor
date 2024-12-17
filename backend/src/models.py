@@ -105,14 +105,18 @@ class Document(db.Model):
         elif not isinstance(delta, Delta):
             raise ValueError(f"Unknown delta type {type(delta)}")
         
+        composed_delta = Delta()  # Start with an empty Delta
+        for op in current_content.ops:
+            composed_delta = composed_delta.compose(Delta([op]))
+        
         # Compose the deltas
-        new_content = current_content.compose(delta)
+        new_content = composed_delta.compose(delta)
         
         # Store the ops array in the content field
         self.content = {'ops': new_content.ops}
         
         self.updated_at = datetime.now(timezone.utc)
-        return self.content['ops']
+        return new_content.ops
     
     def get_current_delta(self):
         if not self.content:
