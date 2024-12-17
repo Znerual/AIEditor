@@ -35,7 +35,7 @@ Eddy is a work-in-progress AI-enhanced LaTeX text editor designed to elevate you
 
 ## Installation
 
-Follow the steps below to set up Eddy on your local machine.
+Follow the steps below to set up Eddy on your local machine. Note that the backend currently uses textract, which does not run natively on Windows. Therefore, to run it on Windows, either find a way to install textract on Windows or run a docker image of the backend.
 
 ### Step 1: Set Up Node.js
 
