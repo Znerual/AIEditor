@@ -1,5 +1,4 @@
 # src/app.py
-import base64
 from datetime import datetime
 import hashlib
 import subprocess
@@ -13,13 +12,10 @@ from cli import CLI
 import requests
 import threading
 import logging
-import textract
 import queue
-import config
 from delta import Delta
 import os
 import io
-import tempfile
 from fileProcessor import FileProcessor
 from models import db, User, Document, DocumentReadAccess, DocumentEditAccess, Thumbnail, FileContent, FileEmbedding, SequenceEmbedding
 from sqlalchemy import text
