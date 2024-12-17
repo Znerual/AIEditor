@@ -6,6 +6,7 @@ from events import WebSocketEvent
 from document_manager import DocumentManager
 from autocomplete_manager import AutocompleteManager
 from dialog_manager import DialogManager
+from structure_manager import StructureManager
 from auth import Auth
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +14,7 @@ from models import Document, db
 
 from delta import Delta
 import uuid
-from utils import delta_to_string
+from utils import delta_to_string, string_to_delta
 import threading
 from config import Config
 
@@ -21,6 +22,7 @@ class SocketManager:
     _instance: Optional['SocketManager'] = None
     _socketio: Optional[SocketIO] = None
     _autocomplete_manager: Optional[AutocompleteManager] = None
+    _structure_manager: Optional[StructureManager] = None
     _executor: Optional[ThreadPoolExecutor] = None
     current_content_selection = []
 
@@ -33,6 +35,7 @@ class SocketManager:
         self._socketio = socketio
         self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key, debug=debug)
         self._dialog_manager = DialogManager(api_key=gemini_api_key, debug=debug)
+        self._structure_manager = StructureManager(api_key=gemini_api_key, debug=debug)
         self._executor = ThreadPoolExecutor(max_workers=5)
         self._setup_handlers()
 
@@ -205,6 +208,68 @@ class SocketManager:
             print(data)
             self.current_content_selection = [item for item in data if 'file_id' in item and 'content_type' in item]  
             self._autocomplete_manager.on_user_content_change(user_id, self.current_content_selection)
+
+        @self._socketio.on('client_structure_uploaded')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_structure_uploaded(user_id, data):
+            print("Structure uploaded")
+            if not data:
+                self.emit_event(WebSocketEvent('server_error', {'message': 'Missing data'}))
+                return
+            
+           
+            
+            structure_text = ""
+            if data["content_type"] == 'file_content': 
+                structure_text = data["text_extracted"]
+            elif data["content_type"] == 'document':
+                document_id = data["file_id"]
+                document = Document.query.get(document_id)
+                if not document:
+                    self.emit_event(WebSocketEvent('server_error', {'message': 'Document not found'}))
+                    return
+
+                structure_text = DocumentManager.get_document_content(document, as_string=True)
+            
+            if not structure_text or structure_text == "":
+                self.emit_event(WebSocketEvent('server_error', {'message': 'Missing text_extracted'}))
+                return
+
+
+            # Extract structure from the uploaded text
+            extracted_structure = self._structure_manager.extract_structure(structure_text)
+            print("Extracted structure:", extracted_structure)
+
+            # get the current document
+            document_id = session.get('document_id')
+            document = Document.query.get(document_id)
+            if not document:
+                self.emit_event(WebSocketEvent('server_error', {'message': 'Document not found'}))
+                return
+            
+            # Apply the extracted structure to the document
+            new_document_content = self._structure_manager.apply_structure(document, extracted_structure)
+
+            # Convert the new content (string) to a Delta object
+            new_document_content_delta = string_to_delta(new_document_content)
+
+            # Update the document content in the database
+            document.content = new_document_content_delta.ops
+            db.session.commit()
+
+            # Broadcast the new document content to all clients in the same room
+            self.emit_event(WebSocketEvent('server_sent_document_content', {
+                'documentId': document_id,
+                'title': document.title,
+                'content': document.content
+            }), room=document_id)
+
+       
+
+        @self._socketio.on('client_structure_removed')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_structure_removed(user_id):
+            print("Structure removed")
 
         @self._socketio.on('client_chat')
         @Auth.socket_auth_required(emit_event=self.emit_event)
