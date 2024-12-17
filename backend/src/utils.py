@@ -15,7 +15,7 @@ def delta_to_string(delta: Delta) -> str:
 
     composed_delta = Delta()  # Start with an empty Delta
     for op in delta.ops:
-        composed_delta = composed_delta.compose(Delta([op]))
+        composed_delta = Delta([op]).compose(composed_delta)
 
 
     return composed_delta.document()
