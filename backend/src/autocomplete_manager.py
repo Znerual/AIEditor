@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @dataclass
 class SearchContext:
@@ -223,7 +223,7 @@ class AutocompleteManager:
                 logging.debug(f"Cache updated for user {user_id}")
             else:
                 relevant_sequences = self.last_search_cache[user_id].sequences
-                logging.info(f"Using cached sequences for user {user_id}")
+                logging.debug(f"Using cached sequences for user {user_id}")
             
             rag_context = "\n".join(relevant_sequences) if relevant_sequences else ""
             
@@ -246,11 +246,11 @@ class AutocompleteManager:
             response = self.model.generate_content(prompt)
             
             suggestions = [
-                suggestion.strip()
+                ' '.join(suggestion.split()) # clear tabs, newlines, trainling whitespaces
                 for suggestion in response.text.split('\n')
                 if suggestion.strip()
             ]
-            logging.info(f"Suggestions generated: {suggestions}")
+            logging.debug(f"Suggestions generated: {suggestions}")
             
             return suggestions
             
