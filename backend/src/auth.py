@@ -10,7 +10,6 @@ from models import User
 
 class Auth:
     SECRET_KEY = 'your-secret-key'  # Move to environment variables in production
-    
     @staticmethod
     def generate_token(user_id: str, is_admin: bool) -> str:
         payload = {
