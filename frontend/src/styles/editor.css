@@ -132,6 +132,10 @@
   background-color: red;
 }
 
+.completion {
+  color: #888;
+}
+
 /* Structure Preview Styles */
 .structure-preview {
   position: fixed;

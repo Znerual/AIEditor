@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
 import SuggestionBlot from './SuggestionBlot';
+import CompletionBlot from './CompletionBlot';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { Headerbar } from '../../components/Headerbar/Headerbar';
 import { StructurUpload } from '../../components/Sidebar/StructureUpload';
@@ -20,6 +21,7 @@ import '../../styles/editor.css';
 
 const Delta = Quill.import('delta');
 Quill.register(SuggestionBlot);
+Quill.register(CompletionBlot);
 
 // Debugging flags
 const DEBUG_FLAGS = {
@@ -72,10 +74,10 @@ export const Editor = ({ documentId }) => {
     const quillRef = useRef(null);
     const { user, logout } = useAuth();
 
-    const autocompletionSuggestionStyle = { 
-        color: '#888',
-        backgroundColor: '#f0f0f0',
-    };
+    // const autocompletionSuggestionStyle = { 
+    //     color: '#888',
+    //     backgroundColor: '#f0f0f0',
+    // };
 
     const DEBOUNCE_WAITING_TIME = 100; // Time in milliseconds to wait before sending a request
 
@@ -236,7 +238,7 @@ export const Editor = ({ documentId }) => {
 
         // Show the first suggestion
         
-        quillEditor.insertText(insertIndex, suggestionText, autocompletionSuggestionStyle, 'silent'); // Insert with custom formats
+        quillEditor.insertText(insertIndex, suggestionText, 'completion', 'silent'); // Insert with custom formats
         quillEditor.setSelection(insertIndex + suggestionText.length, 0, 'silent');
     
         setAutocompletionSuggestions(event.suggestions);
@@ -312,7 +314,7 @@ export const Editor = ({ documentId }) => {
                 
                 // Insert new suggestion
                 const newSuggestion = autocomplationSuggestions[newIndex];
-                quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, autocompletionSuggestionStyle, 'silent');
+                quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, 'completion', 'silent');
                 quillEditor.setSelection(cursorPositionBeforeSuggestion + newSuggestion.length, 0, 'silent');
 
                 setAutocompletionSuggestionIndex(newIndex);
@@ -424,7 +426,7 @@ export const Editor = ({ documentId }) => {
                     quillEditor.insertText(
                         cursorPositionBeforeSuggestion + newTypedText.length,
                         remainingSuggestion,
-                        autocompletionSuggestionStyle,
+                        'completion',
                         'silent'
                     );
                     
