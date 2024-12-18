@@ -1,4 +1,5 @@
 # src/socket_manager.py
+from os import access
 from flask import session
 from flask_socketio import SocketIO, join_room, leave_room
 from typing import Optional
@@ -27,17 +28,22 @@ class SocketManager:
     _executor: Optional[ThreadPoolExecutor] = None
     current_content_selection = []
 
-    def __new__(cls):
+    def __new__(cls, socketio, gemini_api_key, debug=False):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def init_socket_manager(self, socketio, gemini_api_key, debug=False):
+    def __init__(self, socketio, gemini_api_key, debug=False):
+        self._init_socket_manager(socketio, gemini_api_key, debug)
+        
+    
+    def _init_socket_manager(self, socketio, gemini_api_key, debug=False):
         self._socketio = socketio
         self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key, debug=debug)
         self._dialog_manager = DialogManager(api_key=gemini_api_key, debug=debug)
         self._structure_manager = StructureManager(api_key=gemini_api_key, debug=debug)
         self._executor = ThreadPoolExecutor(max_workers=5)
+        self.active_users = {}
         self._setup_handlers()
 
 
@@ -70,6 +76,36 @@ class SocketManager:
             print("Client tries to authenticate")
             print(f'Client authenticated: user_id={user_id}')
 
+        @self._socketio.on('client_leave_document')
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_leave_document(user_id, data):
+            try:
+                document_id = data.get('documentId')
+
+                # Remove user from active users list
+                if document_id in self.active_users:
+                    self.active_users[document_id].discard(user_id)
+
+                    # If no users are left in the document, remove the document from the list
+                    if not self.active_users[document_id]:
+                        del self.active_users[document_id]
+
+                # Leave the room
+                leave_room(document_id)
+
+                # Broadcast user left event
+                self.emit_event(
+                    WebSocketEvent('server_user_left', {
+                        'userId': user_id,
+                        'documentId': document_id
+                    }),
+                    room=document_id
+                )
+
+            except Exception as e:
+                print(f"Error handling client_leave_document: {e}")
+                self.emit_event(WebSocketEvent('server_error', {'message': str(e)}))
+
            
         @self._socketio.on('client_get_document')
         @Auth.socket_auth_required(emit_event=self.emit_event)
@@ -81,40 +117,54 @@ class SocketManager:
                     print(data)
                     raise ValueError("Missing documentId field in handle_get_document")
                 
+                document = Document.query.get_or_404(document_id)
+                
+                access_rights = None
+                # get the access rights for the file
+                if int(user_id) == int(document.user_id):
+                    access_rights = 'owner'
+                else:
+                    edit_access_users = User.query.join(DocumentEditAccess, DocumentEditAccess.user_id == User.id).filter(DocumentEditAccess.document_id == document.id, DocumentEditAccess.user_id == user_id).first()
+                    if edit_access_users:
+                        access_rights ='edit'
+                    else:
+                        read_access_users = User.query.join(DocumentReadAccess, DocumentReadAccess.user_id == User.id).filter(DocumentReadAccess.document_id == document.id, DocumentReadAccess.user_id == user_id).first()
+                        if read_access_users:
+                            access_rights = 'read'
+                        
+                
+                if not access_rights:
+                    print(f"WARNING! Client {user_id} tries to get unauthorized access to document {document_id}.")
+                    return
+                
                 # Store the document ID in the session for this client
                 session['document_id'] = document_id
+                session['access_rights'] = access_rights
 
 
                 # Join the room specific to the document ID
                 join_room(document_id)
+                # Add user to active users list
+                if document_id not in self.active_users:
+                    self.active_users[document_id] = set()
+                self.active_users[document_id].add(user_id)
 
-                document = Document.query.filter_by(id=document_id, user_id=user_id).first()
-                if not document:
-                    # fix for documents with read or edit righs only
-                    self.emit_event(WebSocketEvent('server_error', {'message': f"Document not found: {document_id}"}))
-                    return
-                
-                # get the access rights for the file
-                if int(user_id) == int(document.user_id):
-                    session['access_rights'] = 'owner'
-                else:
-                    edit_access_users = User.query.join(DocumentEditAccess, DocumentEditAccess.user_id == User.id).filter(DocumentEditAccess.document_id == document.id, DocumentEditAccess.user_id == user_id).first()
-                    if edit_access_users:
-                        session['access_rights'] = 'edit'
-                    else:
-                        read_access_users = User.query.join(DocumentReadAccess, DocumentReadAccess.user_id == User.id).filter(DocumentReadAccess.document_id == document.id, DocumentReadAccess.user_id == user_id).first()
-                        if read_access_users:
-                            session['access_rights'] = 'read'
-                        else:
-                            session['access_rights'] = 'unauthorized'
-                            print(f"WARNING! Client {user_id} tries to get unauthorized access to document {document_id}.")
-                            return
-                        
+                # Broadcast user joined event
+                self.emit_event(
+                    WebSocketEvent('server_user_joined', {
+                        'userId': user_id,
+                        'documentId': document_id,
+                        'username': User.query.get(user_id).email  # Get user's email or other identifying info
+                    }),
+                    room=document_id
+                )
+
                 content = DocumentManager.get_document_content(document)
                 self.emit_event(WebSocketEvent('server_sent_document_content', {
                     'documentId': document_id,
                     'title': document.title,
-                    'content': content.ops
+                    'content': content.ops,
+                    'access_rights': access_rights,
                 }))
                 
             except Exception as e:
@@ -133,14 +183,21 @@ class SocketManager:
                 if not session['access_rights'] in ["owner", "edit"]:
                     self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
                     return
+                
+                print("Text change data: " ,data)
                 # User ID comes from the token, not the request
                 updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
-                
+                print("Updated content: ", updated_content)
                 # Broadcast the delta to all other clients in the same document room (except the sender)
-                self.emit_event(WebSocketEvent('client_text_change', data), room=document_id, include_self=False)
+                self.emit_event(WebSocketEvent('server_text_change', {
+                                    'delta' : delta,
+                                    'documentId': document_id,
+                                    'userId' : user_id,
+                                }), 
+                                room=document_id, include_self=False)
                 
             except Exception as e:
-                print(f"Error handling text change: {str(e)}")
+                print(f"Error handling text change server: {str(e)}")
                 self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
         
         @self._socketio.on('client_request_suggestions')
@@ -183,7 +240,7 @@ class SocketManager:
                 print(f"Title Mnaually set: {document.title_manually_set}, len content string: {len(content_str)}")
 
                 # Generate a title for the document
-                if not document.title and not len(document.title) > 3 and not document.title_manually_set and len(content_str) > Config.TITLE_DOCUMENT_LENGTH_THRESHOLD:
+                if (not document.title or (document.title and not len(document.title) > 3)) and not document.title_manually_set and len(content_str) > Config.TITLE_DOCUMENT_LENGTH_THRESHOLD:
                     print("Generating title")
                     title = self._autocomplete_manager.generate_title(content_str)
                     if title:
@@ -197,7 +254,7 @@ class SocketManager:
                 
                 
             except Exception as e:
-                print(f"Error handling text change: {str(e)}")
+                print(f"Error handling generating suggestions: {str(e)}")
                 self.emit_event(WebSocketEvent('error', {'message': str(e), 'type' : str(type(e))}))
         
         
@@ -221,9 +278,10 @@ class SocketManager:
                 document.title = title
                 document.title_manually_set = True
                 db.session.commit()
-                self.emit_event(WebSocketEvent('client_title_change', {
+                self.emit_event(WebSocketEvent('server_title_change', {
                     'documentId': document_id,
-                    'title': title
+                    'title': title,
+                    'userId' : user_id,
                 }), room=document_id, include_self=False)
             except Exception as e:
                 print(f"Error handling title change: {str(e)}")
@@ -240,6 +298,8 @@ class SocketManager:
                 return
             self.current_content_selection = [item for item in data if 'file_id' in item and 'content_type' in item]  
             self._autocomplete_manager.on_user_content_change(user_id, self.current_content_selection)
+
+            self.emit_event(WebSocketEvent('server_content_changes', data), room=session['document_id'], include_self=False)
 
         @self._socketio.on('client_structure_uploaded')
         @Auth.socket_auth_required(emit_event=self.emit_event)
@@ -292,12 +352,12 @@ class SocketManager:
             # document.content = new_document_content_delta.ops
             # db.session.commit()
 
-            # Broadcast the new document content to all clients in the same room
+
             self.emit_event(WebSocketEvent('server_sent_new_structure', {
                 'documentId': document_id,
                 'title': document.title,
                 'content': new_document_content_delta.ops
-            }), room=document_id)
+            }))
 
         @self._socketio.on('client_structure_accepted')
         @Auth.socket_auth_required(emit_event=self.emit_event)
@@ -326,6 +386,11 @@ class SocketManager:
             document.content = data["content"]
             db.session.commit()
 
+            self.emit_event(WebSocketEvent('server_sent_accepted_new_structure', {
+                'documentId': document_id,
+                'title': document.title,
+                'content': data["content"]
+            }), room=document_id, include_self=False)
             print("Document content updated")
             
 
@@ -360,6 +425,9 @@ class SocketManager:
             edit_id = data.get("edit_id")
             accepted = data.get("accepted")
 
+            if not accepted:
+                return
+            
             if not session['access_rights'] in ["owner", "edit"]:
                 self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
                 return
@@ -369,8 +437,12 @@ class SocketManager:
                 return
 
             try:
-                self._dialog_manager.apply_edit(user_id, document_id, edit_id, accepted)
-                self.emit_event(WebSocketEvent("server_edit_applied", {"edit_id": edit_id, "status": "accepted" if accepted else "rejected"}))
+                response, deltas = self._dialog_manager.apply_edit(user_id, document_id, edit_id, accepted)
+                self.emit_event(WebSocketEvent("server_edit_applied", {
+                    "edit_id": edit_id, 
+                    "response": response,
+                    "deltas_ops": deltas,
+                }))
             except Exception as e:
                 self.emit_event(WebSocketEvent("server_error", {"message": str(e)}))
         
@@ -379,9 +451,10 @@ class SocketManager:
             raise RuntimeError("SocketIO not initialized")
         
         try:
-            print(f"🚀 Emitting event '{event.name}' with data: {event.data} and kwargs {kwargs}")
             self._socketio.emit(event.name, event.data, **kwargs)
-            print(f"✅ Successfully emitted event '{event.name}'")
+            if Config.SHOW_EMIT_SUCCESS:
+                print(f"🚀 Emitting event '{event.name}' with data: {event.data} and kwargs {kwargs}")
+                print(f"✅ Successfully emitted event '{event.name}'")
             return True
         except Exception as e:
             print(f"❌ Error emitting event: {str(e)}")

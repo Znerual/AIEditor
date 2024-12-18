@@ -60,7 +60,6 @@ class FlaskApp:
         self.file_processor = FileProcessor(Config.TMP_PATH)
 
         self.message_queue = queue.Queue() # Create the message queue
-        self.socket_manager = SocketManager()
         socketio = SocketIO(
             app=self.app,
             cors_allowed_origins=Config.CORS_ORIGINS,
@@ -76,7 +75,8 @@ class FlaskApp:
 
         gemini_api_key = "1234" # read from environment variables
 
-        self.socket_manager.init_socket_manager(socketio, gemini_api_key, debug=Config.DEBUG)
+        self.socket_manager = SocketManager(socketio, gemini_api_key, debug=Config.DEBUG)
+        # self.socket_manager.init_socket_manager()
 
         # setup routes
         self.setup_routes()
@@ -323,9 +323,8 @@ class FlaskApp:
             if not user_id:
                 return jsonify({'message': 'User not found'}), 404
 
-            user = User.query.get(user_id)
-            if not user:
-                return jsonify({'message': 'User not found'}), 404
+            user = User.query.get_or_404(user_id)
+            
 
             try:
                 print("Searching for documents with term", search_term)
@@ -395,9 +394,8 @@ class FlaskApp:
             if not user_id:
                 return jsonify({'message': 'User not found'}), 404
 
-            user = User.query.get(user_id)
-            if not user:
-                return jsonify({'message': 'User not found'}), 404
+            user = User.query.get_or_404(user_id)
+           
 
             # Fetch documents owned by the user
             owned_documents = Document.query.filter_by(user_id=user_id).all()
