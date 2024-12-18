@@ -5,14 +5,14 @@ from models import FileContent, Document, db
 import google.generativeai as genai
 import threading
 import time
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from utils import delta_to_string
 from delta import Delta
 import json
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @dataclass
 class DialogTurn:
@@ -426,20 +426,20 @@ class DialogManager:
         prompt += "## Agent Response:\n"
         return prompt
 
-    def _execute_function_calls(self, document_id: Optional[int], function_calls: List[FunctionCall]) -> str:
+    def _execute_function_calls(self, document_id: Optional[int], function_calls: List[FunctionCall]) -> Tuple[str, List[Delta]]:
         """Executes the function calls and returns a natural language response."""
         if not document_id:
-            return "Error: No document context provided for function calls."
+            return "Error: No document context provided for function calls.", []
 
         document = Document.query.get(document_id)
         if not document:
-            return "Error: Document not found."
+            return "Error: Document not found.", []
 
         document_content = document.get_current_delta()
         document_text = delta_to_string(document_content)
 
         response_parts = []
-
+        deltas = []
         for call in function_calls:
             try:
                 if call.name == "insert_text":
@@ -447,6 +447,7 @@ class DialogManager:
                     position = int(call.arguments["position"])
                     current_delta = document.get_current_delta()
                     new_delta = current_delta.compose(Delta().retain(position).insert(text))
+                    deltas.append(new_delta.ops)
                     document.apply_delta(new_delta.ops)
                     response_parts.append(f"Inserted '{text}' at position {position}.")
                     call.status = "success"  # Update status
@@ -456,6 +457,7 @@ class DialogManager:
                     end = int(call.arguments["end"])
                     current_delta = document.get_current_delta()
                     new_delta = current_delta.compose(Delta().retain(start).delete(end - start))
+                    deltas.append(new_delta.ops)
                     document.apply_delta(new_delta.ops)
                     response_parts.append(f"Deleted text from position {start} to {end}.")
                     call.status = "success"  # Update status
@@ -466,6 +468,7 @@ class DialogManager:
                     new_text = call.arguments["new_text"]
                     current_delta = document.get_current_delta()
                     new_delta = current_delta.compose(Delta().retain(start).delete(end - start).insert(new_text))
+                    deltas.append(new_delta.ops)
                     document.apply_delta(new_delta.ops)
                     response_parts.append(f"Replaced text from position {start} to {end} with '{new_text}'.")
                     call.status = "success"  # Update status
@@ -492,7 +495,7 @@ class DialogManager:
                 call.status = "failed"
 
         db.session.commit()
-        return " ".join(response_parts)
+        return " ".join(response_parts), deltas
     
     def _describe_actions(self, function_calls: List[FunctionCall]) -> str:
         """
@@ -557,9 +560,12 @@ class DialogManager:
         # Access the function call using the found indices
         function_call = history[turn_index].function_calls[function_call_index]
 
+        response = ""
+        deltas = []
+
         if accepted:
             # Apply the function call
-            response = self._execute_function_calls(document_id, [function_call])  # Pass a list with a single function call
+            response, deltas = self._execute_function_calls(document_id, [function_call])  # Pass a list with a single function call
             function_call.status = "accepted"
             logging.info(f"Function call {function_call.name} executed: {response}")
         else:
@@ -568,3 +574,5 @@ class DialogManager:
 
         # Update the dialog history
         self.dialog_history[user_id] = history
+
+        return response, deltas
