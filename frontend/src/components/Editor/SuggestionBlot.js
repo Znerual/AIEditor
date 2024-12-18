@@ -1,92 +1,91 @@
 // frontend/src/components/Quill/SuggestionBlot.js
-import ReactQuill, { Quill } from 'react-quill';
+import { Quill } from 'react-quill';
 
 // look at https://github.com/slab/quill/issues/3114  https://github.com/slab/parchment?tab=readme-ov-file
  
 const Inline = Quill.import('blots/inline')
 class SuggestionBlot extends Inline {
     constructor(domNode, value) {
-        console.log('[SuggestionBlot] Creating suggestion blot with data:', value, " on DOM node ", domNode);
+        console.log('[SuggestionBlot] Creating suggestion blot with data:', value);
         super(domNode, value);
-        if (value) {
-            this.description = null;
-            this.decisionButtons = null;
-            this.domNode.setAttribute('data.suggestion', 'true');
-            this.domNode.style.cursor = 'pointer';
-            this.domNode.classList.add('suggestion');
-            this.type = value.type;
-            this.value = value;
+        this.domNode.style.cursor = 'pointer';
+        this.decisionButtons = null;
+        this.description = null;
+        // if (value) {
+        //     this.description = null;
+        //     this.decisionButtons = null;
+        //     this.domNode.setAttribute('data.suggestion', 'true');
+        //     this.type = value.type;
+        //     this.value = value;
             
-            console.log('[SuggestionBlot] Created suggestion blot with data:', value, " on DOM node ", domNode);
+        //     console.log('[SuggestionBlot] Created suggestion blot with data:', value, " on DOM node ", domNode);
 
-        }
+        // }
         
     }
 
     static create(data) {
-        let node = super.create(data);
-        if (this.value) {
-            console.log("Creating blot with ", data);
-            node.setAttribute('class', 'suggestion'); // Add a class for styling
-            node.setAttribute('dataset.type', data.type); // 'insert', 'delete', 'replace'
-            console.log("Created suggestion blot with data ", data, node);
-        }
+        let node = super.create();
+
+        console.log("Creating blot with ", data);
+        node.setAttribute('class', 'suggestion'); // Add a class for styling
+        node.setAttribute('id', data.id);
+        node.setAttribute('type', data.type); // 'insert', 'delete', 'replace'
+        node.setAttribute('text', data.text);
+        node.setAttribute('position', data.position);
+        
         return node;
     }
 
     // Attach events after the blot is mounted
     attach() {
         super.attach();
-        if (this.value) {
-            console.log('[SuggestionBlot] Attach called');
+        console.log('[SuggestionBlot] Suggestion blot attached:', this.domNode);
 
-
-            console.log('[SuggestionBlot] Suggestion blot attached:', this.domNode);
-
-            this.domNode.addEventListener('click', (e) => {
-                console.log('[SuggestionBlot] Click event triggered', e);
-                e.preventDefault();
-                e.stopPropagation();
-                this.showDecisionButtons(e);
-            });
-            
-            this.domNode.addEventListener('mouseover', (e) => {
-                console.log('[SuggestionBlot] Mouseover event triggered', e);
-                e.preventDefault();
-                e.stopPropagation();
-                this.showDescription(e);
-            });
-            
-            this.domNode.addEventListener('mouseout', (e) => {
-                console.log('[SuggestionBlot] Mouseout event triggered', e);
-                e.preventDefault();
-                e.stopPropagation();
-                this.hideDescription();
-            });
-            
-            console.log('[SuggestionBlot] Events attached to node:', this.domNode);
-        }
+        this.domNode.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showDecisionButtons(e);
+        });
+        
+        this.domNode.addEventListener('mouseover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.showDescription(e);
+        });
+        
+        this.domNode.addEventListener('mouseout', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.hideDescription();
+        });
+        
+        console.log('[SuggestionBlot] Events attached to node:', this.domNode);
+        
     }
 
     // Clean up events when blot is unmounted
     detach() {
-        if (this.value) {
-            console.log('[SuggestionBlot] Detach called');
-            this.domNode.removeEventListener('click', this.handleClick);
-        }
+        console.log('[SuggestionBlot] Detach called');
+        this.domNode.removeEventListener('click', this.handleClick);
+        
         super.detach();
     }
 
     static formats(node) {
-        if (node.hasAttribute('data.suggestion')) {
-            return true;
-        }
-        return false;
-        
+        return node.getAttribute('type');
+        return true;
     }
+    // static formats(node) {
+    //     return node.getAttribute('dataset.type');
+    //     // if (node.hasAttribute('data.suggestion') && node.data.suggestion) {
+    //     //     return true;
+    //     // }
+    //     // return false;
+        
+    // }
     
     handleClick(event) {
-        console.log('[SuggestionBlot] handleClick called', event);
         event.preventDefault();
         event.stopPropagation();
 
@@ -104,16 +103,12 @@ class SuggestionBlot extends Inline {
     }
 
     showDescription(event) {
-        
-        console.log("Showing tooltip for suggestion ", this.domNode);
-
-
         this.description = document.createElement('div');
         this.description.classList.add('suggestion-tooltip');
 
         // Get suggestion details
-        const suggestionType = this.type;
-        const suggestionText = this.value.text;
+        const suggestionType = this.domNode.getAttribute('type');
+        const suggestionText = this.domNode.getAttribute('text');
         let suggestionDetail = '';
         
         switch (suggestionType) {
@@ -162,6 +157,7 @@ class SuggestionBlot extends Inline {
         // Create a container for the buttons
         const buttonContainer = document.createElement('div');
         buttonContainer.classList.add('button-container');
+
         // Create buttons with improved styling
         const acceptButton = this.createTooltipButton('✓', 'green');
         const rejectButton = this.createTooltipButton('✗', 'red');
@@ -186,6 +182,7 @@ class SuggestionBlot extends Inline {
         // Add the button container to the tooltip
         this.decisionButtons.appendChild(buttonContainer);
         document.body.appendChild(this.decisionButtons);
+
         // Add global click listener to close tooltip
         this.documentClickHandler = (e) => {
             if (this.decisionButtons !== null && !this.decisionButtons.contains(e.target) && !this.domNode.contains(e.target)) {
@@ -231,19 +228,30 @@ class SuggestionBlot extends Inline {
 
 
     acceptSuggestion() {
+        const detail = {
+            'id' : this.domNode.getAttribute('id'),
+            'type' : this.domNode.getAttribute('type'),
+            'text' : this.domNode.getAttribute('text'),
+            'position' : this.domNode.getAttribute('position')
+        }
         // Dispatch custom event
         this.domNode.dispatchEvent(new CustomEvent('accept-suggestion', {
             bubbles: true,
-            detail: this.value
+            detail: detail
         }));
     }
 
     rejectSuggestion() {
-
+        const detail = {
+            'id' : this.domNode.getAttribute('id'),
+            'type' : this.domNode.getAttribute('type'),
+            'text' : this.domNode.getAttribute('text'),
+            'position' : this.domNode.getAttribute('position')
+        }
         // Dispatch custom event
         this.domNode.dispatchEvent(new CustomEvent('reject-suggestion', {
             bubbles: true,
-            detail: this.value
+            detail: detail
         }));
     }
 
