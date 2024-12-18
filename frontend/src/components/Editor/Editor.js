@@ -1,4 +1,3 @@
-// src/components/Editor/Editor.js
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
 import SuggestionBlot from './SuggestionBlot';
@@ -19,18 +18,44 @@ import '../../styles/components.css';
 import '../../styles/globals.css'; 
 import '../../styles/editor.css';
 
-// const Delta = Quill.import('delta');
+const Delta = Quill.import('delta');
 Quill.register(SuggestionBlot);
+
+// Debugging flags
+const DEBUG_FLAGS = {
+    AUTH: false,
+    ERROR: true,
+    TITLE: false,
+    STRUCTURE: false,
+    CONTENT: false,
+    CHAT: true,
+    AUTOCOMPLETION: true,
+    GET_CONTENT: true,
+    USER_EVENTS: false,
+    SERVER_EVENTS: true,
+    EDITOR_CHANGE: true,
+    SUGGESTION_LOGIC: true,
+};
+
+const log = (flag, message, ...args) => {
+    if (DEBUG_FLAGS[flag]) {
+        const stackTrace = new Error().stack;
+        const callerLine = stackTrace.split('@')[0].split('.').pop().trim(); // Get the second line (caller)
+        
+        console.log(`[${flag}](${callerLine}) ${message}`, ...args);
+    }
+};
 
 export const Editor = ({ documentId }) => {
     // State management
     const [showAlert, setShowAlert] = useState(false);
-    const [ alertMessage, setAlertMessage ] = useState('');
+    const [alertMessage, setAlertMessage ] = useState('');
+    const [activeUsers, setActiveUsers] = useState([]);
     const [uploadedStructureFile, setUploadedStructureFile] = useState(null);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [debugEvents, setDebugEvents] = useState([]);
     const [chatMessages, setChatMessages] = useState([]);
-    const [editorContent, setEditorContent] = useState('');
+    const [editorContent, setEditorContentD] = useState('');
     const [currentDocumentTitle, setCurrentDocumentTitle] = useState('');
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [autocomplationSuggestions, setAutocompletionSuggestions] = useState([]);
@@ -55,14 +80,18 @@ export const Editor = ({ documentId }) => {
     const DEBOUNCE_WAITING_TIME = 100; // Time in milliseconds to wait before sending a request
 
     const handleAuthenticationFailed = useCallback((event) => {
-        console.log("Authentication failed", event);
+        log('AUTH', "Authentication failed", event);
         logout();
     }, []);
 
-    
+    const handleError = useCallback((event) => {
+        log('ERROR', "Socket Error:", event);
+        setAlertMessage(event.message || 'An unexpected error occurred.');
+        setShowAlert(true);
+    }, []);
 
     const handleDocumentTitleGenerated = useCallback((event) => {
-        console.log("Document title generated", event);
+        log('TITLE', "Document title generated", event);
         setCurrentDocumentTitle(event.title);
     }, []);
 
@@ -83,11 +112,12 @@ export const Editor = ({ documentId }) => {
     };
 
     const handleStructureParsed = useCallback((newContent) => {
-        setEditorContent(newContent);
+        quillRef.current.getEditor().setContents(newContent, 'silent');
+        //setEditorContent(newContent);
     }, []);
 
     const handleStructureUpload = useCallback(async (data) => {
-        console.log("Handling structure upload", data);
+        log('STRUCTURE', "Handling structure upload", data);
         if (data) {
             emit('client_structure_uploaded', data);
         }
@@ -95,16 +125,16 @@ export const Editor = ({ documentId }) => {
       }, []);
 
     const handleContentUpload = useCallback((extractedContent) => {
+        log('CONTENT', "Extracted content:", extractedContent);
         // Update state with extracted content
         emit('client_content_changes', extractedContent);
         // You can now do something with the extractedContent, like sending it to a server or storing it
-        console.log("Extracted content:", extractedContent);
 
     }, []);
 
     const handleChatAnswer = useCallback((data) => {
         const { response, suggested_edits } = data;
-        console.log('Received chat answer:', response, suggested_edits);
+        log('CHAT', 'Received chat answer:', response, suggested_edits);
         setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
         setSuggestedEdits(suggested_edits); // Assuming you still want to store them in state
 
@@ -113,7 +143,7 @@ export const Editor = ({ documentId }) => {
         
         if (suggested_edits && suggested_edits.length > 0) {
             suggested_edits.forEach(edit => {
-            console.log('[handleChatAnswer] Processing edit:', edit);
+            log('CHAT', 'Processing edit:', edit);
             if (edit.name === 'insert_text') {
                 const position = Math.min(edit.arguments.position, currentLength);
                 const insertData = {
@@ -122,7 +152,7 @@ export const Editor = ({ documentId }) => {
                 text: edit.arguments.text,
                 position: position
                 };
-                console.log('[handleChatAnswer] Inserting suggestion with data:', insertData);
+                log('CHAT', 'Inserting suggestion with data:', insertData);
             
                 // Insert a placeholder for the suggestion
                 quill.insertText(insertData.position, "*", 'suggestion', insertData);
@@ -137,8 +167,9 @@ export const Editor = ({ documentId }) => {
                 end: end
                 };
                 const suggestionTextROI = quill.getText(start, end - start);
-                quill.deleteText(start, end - start, 'api');
-                quill.insertText(start, suggestionTextROI, 'suggestion', deleteData);
+                quill.formatText(start, end - start, 'suggestion', deleteData);
+                //quill.deleteText(start, end - start, 'api');
+                //quill.insertText(start, suggestionTextROI, 'suggestion', deleteData);
                 
             } else if (edit.name === 'replace_text') {
                 const start = Math.min(edit.arguments.start, currentLength);
@@ -152,8 +183,9 @@ export const Editor = ({ documentId }) => {
                 };
                
                 const suggestionTextROI = quill.getText(start, end - start);
-                quill.deleteText(start, end - start, 'api');
-                quill.insertText(start, suggestionTextROI, 'suggestion', replaceData);
+                quill.formatText(start, end - start, 'suggestion', replaceData);
+                //quill.deleteText(start, end - start, 'api');
+                //quill.insertText(start, suggestionTextROI, 'suggestion', replaceData);
                
             }
             });
@@ -162,13 +194,13 @@ export const Editor = ({ documentId }) => {
 
     const handleAutocompletion = useCallback((event) => {
         if (event.requestId !== lastRequestIdRef.current) {
-            console.log("Ignoring outdated suggestion response", lastRequestIdRef.current, event.requestId);
+            log('AUTOCOMPLETION', "Ignoring outdated suggestion response", lastRequestIdRef.current, event.requestId);
             return; // Ignore outdated responses
         }
 
-        console.log("Show Autocompletion", event);
+        log('AUTOCOMPLETION', "Show Autocompletion", event);
         if (!event.cursorPosition || !event.suggestions || event.suggestions.length === 0) {
-            console.log("No suggestions or cursor position available. Hiding suggestions.");
+            log('AUTOCOMPLETION', "No suggestions or cursor position available. Hiding suggestions.");
             setShowAutocompletionSuggestions(false);
             setAutocompletionSuggestions([]);
             setAutocompletionSuggestionIndex(0);
@@ -178,24 +210,38 @@ export const Editor = ({ documentId }) => {
         const quillEditor = quillRef.current.getEditor();
         const range = quillEditor.getSelection();
         if (!range) {
-            console.warn("No selection found. Aborting autocompletion.");
+            log('AUTOCOMPLETION', "No selection found. Aborting autocompletion.");
             setShowAutocompletionSuggestions(false);
             return;
         }
+
+        const suggestionText = event.suggestions[0];
+        const insertIndex = range.index;
+
+        // Remove any existing suggestion before inserting a new one
+        if (cursorPositionBeforeSuggestion !== null) {
+            const existingSuggestionLength = autocomplationSuggestions[autocompletionSuggestionIndex]?.length || 0;
+            
+            // Adjust deletion to account for the space before the suggestion
+            quillEditor.deleteText(cursorPositionBeforeSuggestion, existingSuggestionLength, 'silent');
+            
+            
+        }
+        
     
+        setShowAutocompletionSuggestions(true);
         // Store the cursor position before applying the suggestion
-        setCursorPositionBeforeSuggestion(range.index);
+        setCursorPositionBeforeSuggestion(insertIndex);
         setUserTypedText('');  // Reset typed text when new suggestion appears
 
         // Show the first suggestion
-        const suggestionText = event.suggestions[0];
-        quillEditor.insertText(range.index, suggestionText, autocompletionSuggestionStyle, 'silent'); // Insert with custom formats
-        quillEditor.setSelection(range.index, 0, 'silent');
+        
+        quillEditor.insertText(insertIndex, suggestionText, autocompletionSuggestionStyle, 'silent'); // Insert with custom formats
+        quillEditor.setSelection(insertIndex + suggestionText.length, 0, 'silent');
     
         setAutocompletionSuggestions(event.suggestions);
         setAutocompletionSuggestionIndex(0); // Reset to the first suggestion
-        setShowAutocompletionSuggestions(true);
-    }, []);
+    }, [autocomplationSuggestions, autocompletionSuggestionIndex, cursorPositionBeforeSuggestion]);
 
     const handleChatSubmit = useCallback((message) => {
         if (message.trim()) {
@@ -207,21 +253,26 @@ export const Editor = ({ documentId }) => {
    
 
     const handleGetContent = useCallback((event) => {
-        console.log("Received document", event); // event has document_id and content fields
+        log('GET_CONTENT', "Received document", event); // event has document_id and content fields
         if (event && event.content) {
             if (event.documentId != documentId) {
-                console.error("Document ID mismatch");
+                log('GET_CONTENT', "Document ID mismatch");
             }
-            setEditorContent(event.content);
+            const currentDelta = new Delta({ops : event.content});
+            log('GET_CONTENT', "Event content:", currentDelta);
+
+           
+            quillRef.current.getEditor().setContents(currentDelta, 'silent');
+            //setEditorContent(event.content);
             setCurrentDocumentTitle(event.title);
         }
-    }, [setEditorContent]);
+    }, []);
 
     const handleGetStructure = useCallback((event) => {
-        console.log("Received structure", event); // event has document_id and content fields
+        log('STRUCTURE', "Received structure", event); // event has document_id and content fields
         if (event && event.content) {
             if (event.documentId != documentId) {
-                console.error("Document ID mismatch");
+                log('STRUCTURE', "Document ID mismatch");
             }
             setRestructuredDocument(event);
             setShowStructureConfirmation(true);
@@ -242,7 +293,7 @@ export const Editor = ({ documentId }) => {
 
     const handleKeyDown = useCallback((event) => {
         if (!showAutocompletionSuggestions) return;
-        console.log("[KeyDown] Show suggestions ", showAutocompletionSuggestions);
+        log('SUGGESTION_LOGIC', "Show suggestions ", showAutocompletionSuggestions);
        
         const quillEditor = quillRef.current.getEditor();
         switch (event.key) {
@@ -252,7 +303,7 @@ export const Editor = ({ documentId }) => {
                 
                 // Remove previous suggestion
                 if (cursorPositionBeforeSuggestion) {
-                    quillEditor.deleteText(cursorPositionBeforeSuggestion, autocomplationSuggestions[autocompletionSuggestionIndex].length + 1);
+                    quillEditor.deleteText(cursorPositionBeforeSuggestion, autocomplationSuggestions[autocompletionSuggestionIndex].length);
                 }
 
                 const newIndex = event.key === 'ArrowDown'
@@ -262,7 +313,7 @@ export const Editor = ({ documentId }) => {
                 // Insert new suggestion
                 const newSuggestion = autocomplationSuggestions[newIndex];
                 quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, autocompletionSuggestionStyle, 'silent');
-                quillEditor.setSelection(cursorPositionBeforeSuggestion, 0, 'silent');
+                quillEditor.setSelection(cursorPositionBeforeSuggestion + newSuggestion.length, 0, 'silent');
 
                 setAutocompletionSuggestionIndex(newIndex);
                 setUserTypedText('');
@@ -270,22 +321,40 @@ export const Editor = ({ documentId }) => {
             } case 'Enter':
             case 'Tab': {
                 event.preventDefault();
-                
-
                 if (!cursorPositionBeforeSuggestion) return;
+
+                
                 // Accept the current suggestion
                 const suggestionText = autocomplationSuggestions[autocompletionSuggestionIndex];
                 // Remove the temporary formatting
-                console.log("Deleting text at position ", cursorPositionBeforeSuggestion, " with length ", suggestionText.length + 1);
+                const textAtPosition = quillEditor.getText(cursorPositionBeforeSuggestion, suggestionText.length);
+                log('SUGGESTION_LOGIC', "Debug - Suggestion text:", JSON.stringify(suggestionText));
+                log('SUGGESTION_LOGIC', "Debug - Text at position:", JSON.stringify(textAtPosition));
+
+                log('SUGGESTION_LOGIC', "Deleting text at position ", cursorPositionBeforeSuggestion, " with length ", suggestionText.length);
                 quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestionText.length + 1, 'silent');
-                console.log("Deleted text at position ", cursorPositionBeforeSuggestion, " with length ", suggestionText.length + 1);
+                log('SUGGESTION_LOGIC', "Deleted text at position ", cursorPositionBeforeSuggestion, " with length ", suggestionText.length);
                 // Insert the final text with normal formatting
                 quillEditor.insertText(cursorPositionBeforeSuggestion, suggestionText, 'silent');
-                console.log("Inserted text at position ", cursorPositionBeforeSuggestion, " with text ", suggestionText);
+                //quillEditor.removeFormat(cursorPositionBeforeSuggestion, suggestionText.length, 'silent');
+                log('SUGGESTION_LOGIC', "Inserted text at position ", cursorPositionBeforeSuggestion, " with text ", suggestionText);
                 // Move cursor to end of inserted text
                 quillEditor.setSelection(cursorPositionBeforeSuggestion + suggestionText.length, 0, 'silent');
-                console.log("Cursor position set to ", cursorPositionBeforeSuggestion + suggestionText.length);
+                log('SUGGESTION_LOGIC', "Cursor position set to ", cursorPositionBeforeSuggestion + suggestionText.length);
+                
+                // Delete the created tab/enter character when accepting the suggestion
+                //quillEditor.deleteText(cursorPositionBeforeSuggestion + suggestionText.length, 1, 'silent');
+                //log('SUGGESTION_LOGIC', "Delete first character at current position:", JSON.stringify(cursorPositionBeforeSuggestion + suggestionText.length))
+
                 // Clean up suggestion state
+                const delta = new Delta();
+                delta.retain(cursorPositionBeforeSuggestion);
+                delta.insert(suggestionText);
+                emit('client_text_change', {
+                    delta: delta.ops,
+                    documentId: documentId,
+                });
+
                 setShowAutocompletionSuggestions(false);
                 setCursorPositionBeforeSuggestion(null);
                 setUserTypedText('');
@@ -299,24 +368,52 @@ export const Editor = ({ documentId }) => {
                     return;
                 }
 
-                event.preventDefault();
                 
                 let newTypedText = userTypedText;
                 if (event.key === 'Backspace') {
-                    newTypedText = userTypedText.slice(0, -1);
+                    if (userTypedText.length > 0) {
+                        newTypedText = userTypedText.slice(0, -1);
+                        setUserTypedText(newTypedText);
+                        return;
+                    } else {
+                        const cursorPosition = Math.max(0, cursorPositionBeforeSuggestion - 1);
+                        setCursorPositionBeforeSuggestion(cursorPosition);
+                        return;
+                    }
                 } else if (event.key === 'Escape') {
                     newTypedText = '';
                 } else {
                     newTypedText = userTypedText + event.key;
                 }
+                event.preventDefault();
                 setUserTypedText(newTypedText);
 
                 // Check if typed text matches the start of the current suggestion
                 const currentSuggestion = autocomplationSuggestions[autocompletionSuggestionIndex];
                 if (matchesSuggestion(newTypedText, currentSuggestion) && event.key !== 'Escape') {
+
+                    // check if completion is typed out
+                    if (newTypedText.length >= currentSuggestion.length) {
+                        const delta = new Delta();
+                        delta.retain(cursorPositionBeforeSuggestion);
+                        delta.insert(newTypedText);
+                        emit('client_text_change', {
+                            delta: delta.ops,
+                            documentId: documentId,
+                        });
+
+                        // Clean up suggestion state
+                        setShowAutocompletionSuggestions(false);
+                        setCursorPositionBeforeSuggestion(null);
+                        setUserTypedText('');
+
+                        return;
+                    }
+
                     // Update the display with partially accepted suggestion
                     if (cursorPositionBeforeSuggestion) {
-                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length + 1, 'silent');
+                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
+                        //quillEditor.removeFormat(cursorPositionBeforeSuggestion, newTypedText.length, 'silent');
                     }
                     
                     // Insert accepted part in black
@@ -332,18 +429,26 @@ export const Editor = ({ documentId }) => {
                     );
                     
                     quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
-                    
+                     
     
                 } else {
                     // If there's a mismatch, remove the suggestion
                     if (cursorPositionBeforeSuggestion) {
-                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length + 1, 'silent');
+                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
                     }
                     
                     // Insert the typed text
                     quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
                     quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                     
+                    const delta = new Delta();
+                    delta.retain(cursorPositionBeforeSuggestion);
+                    delta.insert(newTypedText);
+                    emit('client_text_change', {
+                        delta: delta.ops,
+                        documentId: documentId,
+                    });
+
                     // Clean up suggestion state
                     setShowAutocompletionSuggestions(false);
                     setCursorPositionBeforeSuggestion(null);
@@ -355,10 +460,91 @@ export const Editor = ({ documentId }) => {
         }
     }, [showAutocompletionSuggestions, autocomplationSuggestions, autocompletionSuggestionIndex, cursorPositionBeforeSuggestion, userTypedText]);
 
+    const handleUserJoined = useCallback((event) => {
+        log('USER_EVENTS', "User joined", event);
+        setActiveUsers(prevUsers => [...prevUsers, event.username]);
+    }, []);
+
+    const handleUserLeft = useCallback((event) => {
+        log('USER_EVENTS', "User left", event);
+        setActiveUsers(prevUsers => prevUsers.filter(u => u !== event.username));
+    }, []);
+
+    const handleServerTitleChange = useCallback((data) => {
+        log('SERVER_EVENTS', "Server title change", data);
+        if (data.documentId === documentId) {
+            setCurrentDocumentTitle(data.title);
+        }
+    }, [documentId]);
+
+    const handleServerContentChange = useCallback((data) => {
+        log('SERVER_EVENTS', "Server content change", data);
+        if (data.documentId === documentId) {
+            // Todo, set the ContentUpload and add the content file to the list of files
+        }
+    }, [documentId])
+
+    const handleServerSentStructure = useCallback((data) => {
+        log('SERVER_EVENTS', "Server sent structure", data);
+        if (!data || !data.documentId || !data.content) {
+            log('SERVER_EVENTS', 'No structure sent');
+            return;
+        }
+        if (data.documentId !== documentId) {
+            log('SERVER_EVENTS', 'Wrong documentId in server sent structure');
+            return;
+        }
+        quillRef.current.getEditor().setContents(data.content, 'silent');
+        //setEditorContent(data.content);
+        setShowStructureConfirmation(false);
+        // Optionally, clear the restructuredDocument state if you don't need it anymore
+        
+        setRestructuredDocument('');
+    }, [documentId]);
+
+    const handleServerEditApplied = useCallback((data) => {
+        log('SERVER_EVENTS', "Server edit applied", data);
+        if (data.documentId !== documentId) {
+            log('SERVER_EVENTS', 'Wrong documentId in server edit applied');
+            return;
+        }
+
+        if (data.deltas_ops.length === 0) {
+            log('SERVER_EVENTS', 'No deltas_ops in server edit applied');
+            return;
+        }
+
+        const quill = quillRef.current;
+        data.deltas_ops.forEach((delta) => {
+            quill.updateContents(delta);
+        });
+    },[]);
+
+    const handleServerTextChange = useCallback((data) => {
+        if (data.documentId !== documentId) return; // Ignore changes for other documents
+        log('SERVER_EVENTS', "Server text change", data);
+        const quill = quillRef.current;
+        
+        // Apply the delta received from the server
+        quill.updateContents(data.delta, 'silent');
+      }, [documentId]);
+
     const socketEvents = useMemo(() => ({
         server_connects: () => emit('client_get_document', { documentId: documentId }),
-        disconnect: () => console.log('disconnected'),
-        server_disconnects: () => console.log('server disconnected'),
+        disconnect: () => log('NETWORK', 'disconnected'),
+        server_disconnects: () => log('NETWORK', 'server disconnected'),
+        server_error: handleError,
+
+        // Multi User Events
+        server_user_joined: handleUserJoined,
+        server_user_left: handleUserLeft,
+        server_title_change: handleServerTitleChange,
+        server_text_change: handleServerTextChange,
+        server_content_changes: handleServerContentChange,
+        server_sent_accepted_new_structure: handleServerSentStructure,
+        server_edit_applied: handleServerEditApplied,
+
+        // Single User Events
         server_authentication_failed: handleAuthenticationFailed,
         server_sent_document_content: handleGetContent,
         server_sent_new_structure: handleGetStructure,
@@ -381,13 +567,14 @@ export const Editor = ({ documentId }) => {
     }, [wsDebugEvents]);
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
-        console.log("Editor change triggered", source);
-        if (source === 'user') {
+        log('EDITOR_CHANGE', "Editor change triggered", source);
+        setEditorContentD(content);
+        if (source === 'user' && !showAutocompletionSuggestions) {
             const range = editor.getSelection();
-            console.log("Range ", range);
+            log('EDITOR_CHANGE', "Range ", range);
             let index;
             if (!range) {
-                console.log("Editor change triggered, no range");
+                log('EDITOR_CHANGE', "Editor change triggered, no range");
                 index = editor.getLength();
             } else {
                 index = range.index;
@@ -411,7 +598,6 @@ export const Editor = ({ documentId }) => {
                 clearTimeout(debounceTimerRef.current);
             }
 
-
             // Set up a new debounce timer
             debounceTimerRef.current = setTimeout(() => {
 
@@ -419,7 +605,7 @@ export const Editor = ({ documentId }) => {
                     const { documentId, cursorPosition, requestId } = pendingRequestRef.current;
 
                     // Emit the latest pending request
-                    console.log("Emitting latest request:", requestId);
+                    log('EDITOR_CHANGE', "Emitting latest request:", requestId);
                     emit('client_request_suggestions', {
                         documentId,
                         cursorPosition,
@@ -431,17 +617,18 @@ export const Editor = ({ documentId }) => {
                 }
             }, DEBOUNCE_WAITING_TIME);
         }
-        setEditorContent(content);
+        
+        //quillRef.current.getEditor().setContents(content, 'silent');
 
-        if (process.env.REACT_APP_DEBUG) {
-            setDebugEvents(prev => [...prev, { 
-                type: 'editor_change',
-                content,
-                delta,
-                timestamp: new Date()
-            }]);
-        }
-    }, [documentId, emit]);
+        // if (process.env.REACT_APP_DEBUG) {
+        //     setDebugEvents(prev => [...prev, { 
+        //         type: 'editor_change',
+        //         content,
+        //         delta,
+        //         timestamp: new Date()
+        //     }]);
+        // }
+    }, [documentId, emit, showAutocompletionSuggestions]);
 
     // Suggestion Logic
 
@@ -449,7 +636,7 @@ export const Editor = ({ documentId }) => {
     const handleAcceptSuggestion = useCallback((event) => {
         const data = event.detail;
         if (!data) {
-            console.error('Accept suggestion event data is missing');
+            log('SUGGESTION_LOGIC', 'Accept suggestion event data is missing');
             return;
         }
         const quill = quillRef.current.getEditor();
@@ -463,7 +650,7 @@ export const Editor = ({ documentId }) => {
             quill.deleteText(data.start, data.end - data.start, 'silent');
             quill.insertText(data.start, data.text, 'silent');
         } else {
-            console.error('Invalid suggestion type:', data.type);
+            log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.type);
         }
 
         // Emit event to backend
@@ -477,13 +664,13 @@ export const Editor = ({ documentId }) => {
     const handleRejectSuggestion = useCallback((event) => {
         const data = event.detail;
         if (!data) {
-            console.error('Reject suggestion event data is missing');
+            log('SUGGESTION_LOGIC', 'Reject suggestion event data is missing');
             return;
         }
         const quill = quillRef.current.getEditor();
 
-        console.log("Rejecting suggestion ", data.id);
-        console.log("With data ", event);
+        log('SUGGESTION_LOGIC', "Rejecting suggestion ", data.id);
+        log('SUGGESTION_LOGIC', "With data ", event);
         if (data.type === 'insert') {
             quill.deleteText(data.position, 1, 'silent');
         } else if (data.type === 'delete') {
@@ -495,7 +682,7 @@ export const Editor = ({ documentId }) => {
             quill.deleteText(data.start, data.end - data.start, 'silent');
             quill.insertText(data.start, data.text, suggestionTextROI, 'silent');
         } else {
-            console.error('Invalid suggestion type:', data.type);
+            log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.type);
         }
         
         emit('client_apply_edit', {
@@ -515,7 +702,6 @@ export const Editor = ({ documentId }) => {
         ],
     }), []);
 
-
     useEffect(() => {
         const quill = quillRef.current.getEditor();
 
@@ -532,15 +718,15 @@ export const Editor = ({ documentId }) => {
 
     const handleAcceptStructure = useCallback(() => {
         if (!restructuredDocument) {
-            console.error('No restructuredDocument found');
+            log('STRUCTURE', 'No restructuredDocument found');
             return;
         }
-        setEditorContent(restructuredDocument.content);
+        quillRef.current.setText(restructuredDocument, 'silent');
         setShowStructureConfirmation(false);
         // Optionally, clear the restructuredDocument state if you don't need it anymore
         setRestructuredDocument('');
         emit('client_structure_accepted', );
-    }, [restructuredDocument, setEditorContent]);
+    }, [restructuredDocument]);
     
     const handleRejectStructure = useCallback(() => {
         setShowStructureConfirmation(false);
@@ -628,4 +814,3 @@ export const Editor = ({ documentId }) => {
         </div>
     );
 };
-
