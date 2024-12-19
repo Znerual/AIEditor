@@ -212,6 +212,8 @@ npx shadcn-ui@0.8.0 add button card menubar collapsible input label dialog alert
 python app.py
 ```
 
+Make sure you have your gemini api key in your environment variables, named: `GEMINI_API_KEY` and other environment holding the secret key for token authentification in an environment variable called `EDDY_SECRET_KEY`
+
 ### Frontend
 
 1. Select the appropriate Node.js version using nvs:
