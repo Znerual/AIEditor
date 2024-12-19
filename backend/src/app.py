@@ -27,12 +27,34 @@ from sqlalchemy.exc import IntegrityError
 from embedding_manager import EmbeddingManager
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('websocket_app')
+# Create a logger
+logger = logging.getLogger('eddy_logger')
+logger.setLevel(logging.DEBUG)  # Set the minimum logging level
+
+# Create a file handler to write logs to a file
+log_file = os.path.join(os.path.dirname(__file__), 'eddy.log')
+file_handler = logging.FileHandler(log_file)
+file_handler.setLevel(logging.DEBUG)  # Set the minimum logging level for the file handler
+
+# Create a console handler to output logs to the console
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)  # Set the minimum logging level for the console handler
+
+# Create a formatter and set it for both handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add both handlers to the logger
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
 werkzeug_logger = logging.getLogger('werkzeug')
 werkzeug_logger.setLevel(logging.WARNING)
+
 class FlaskApp:
     def __init__(self):
+        logger.info("Initializing FlaskApp...")
         self.app = Flask(__name__)
         self.app.config.from_object(Config)
 
@@ -85,28 +107,31 @@ class FlaskApp:
     def setup_routes(self):
         @self.app.route('/api/login', methods=['POST'])
         def login():
+            logger.info("Login attempt started.")
             data = request.get_json()
             email = data.get('email')
             password = data.get('password')
             user = User.query.filter_by(email=email).first()
             if user and user.check_password(password):
-                print("User logged in: ", user.email, " isAdmin: ", user.is_admin)
+                logger.info(f"User logged in: {user.email}, isAdmin: {user.is_admin}")
                 token = Auth.generate_token(str(user.id), user.is_admin)
+                logger.info("Login attempt successful.")
                 return jsonify({
                     'token': token,
                     'user': {'id': user.id, 'email': user.email, 'isAdmin': user.is_admin}
                 })
             
+            logger.warning(f"Failed login attempt for email: {email}")
             return jsonify({'error': 'Invalid credentials'}), 401
 
         @self.app.route('/api/register', methods=['POST'])
         def register():
+            logger.info("User registration started.")
             data = request.get_json()
             email = data.get('email')
             password = data.get('password')
             is_admin = data.get('isAdmin', False)
 
-            print(f"Using trying to register with {data}")
 
             if not email or not password:
                 return jsonify({'message': 'Email and password are required'}), 400
@@ -122,6 +147,7 @@ class FlaskApp:
                 db.session.commit()
 
                 token = Auth.generate_token(str(new_user.id), new_user.is_admin)
+                logger.info(f"User registered successfully: {email}")
                 return jsonify({
                     'message': 'User registered successfully',
                     'token': token,
@@ -129,17 +155,20 @@ class FlaskApp:
                 }), 201
             except Exception as e:
                 db.session.rollback()  # Rollback in case of error
-                print(f"Error during registration: {e}") # Log the error for debugging
+                logger.error(f"Error during registration: {e}") # Log the error for debugging
                 return jsonify({'message': 'Registration failed'}), 500
             
         
         @self.app.route('/api/authenticate_token', methods=['GET'])
         @Auth.rest_auth_required
         def authenticate_token(user_id):
+            logger.info(f"Token authentication requested for user ID: {user_id}")
             existing_user = User.query.filter_by(id=user_id).first()
             if not existing_user:
+                logger.warning(f"Token authentication failed: User not found for ID: {user_id}")
                 return jsonify({'message': 'User not found'}), 404
             
+            logger.info(f"Token authentication successful for user: {existing_user.email}")
             return jsonify({    
                 'user': {'id': existing_user.id, 'email': existing_user.email, 'isAdmin': existing_user.is_admin}
             })
@@ -150,25 +179,31 @@ class FlaskApp:
             """
             Adds a collaborator to a document with specified access rights.
             """
+            logger.info(f"Adding collaborator to document: {document_id} by user: {user_id}")
+
             data = request.get_json()
             collaborator_email = data.get('email')
             rights = data.get('rights', 'read')  # Default to 'read' if not specified
 
             # Validate input
             if not collaborator_email:
+                logger.warning("Failed to add collaborator: Collaborator email is required.")
                 return jsonify({'message': 'Collaborator email is required'}), 400
 
             # Check if the document exists and if the current user is the owner
             document = Document.query.filter_by(id=document_id).first()
             if not document:
+                logger.warning(f"Document not found for ID: {document_id}")
                 return jsonify({'message': 'Document not found'}), 404
             
             if int(document.user_id) != int(user_id):
+                logger.warning(f"Unauthorized attempt to add collaborator by user: {user_id} for document: {document_id}")
                 return jsonify({'message': 'Only the document owner can add collaborators'}), 403
 
             # Check if the collaborator exists
             collaborator = User.query.filter_by(email=collaborator_email).first()
             if not collaborator:
+                logger.warning(f"Collaborator not found for email: {collaborator_email}")
                 return jsonify({'message': 'Collaborator not found'}), 404
 
             # Add collaborator with specified rights
@@ -177,6 +212,7 @@ class FlaskApp:
                     # Check for existing edit access
                     edit_access = DocumentEditAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
                     if edit_access:
+                        logger.warning(f"Collaborator {collaborator_email} already has edit access to document {document_id}")
                         return jsonify({'message': 'Collaborator already has edit access to this document'}), 409
 
                     # Remove existing read access if it exists
@@ -190,6 +226,7 @@ class FlaskApp:
                     # Check for existing read access
                     read_access = DocumentReadAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
                     if read_access:
+                        logger.warning(f"Collaborator {collaborator_email} already has read access to document {document_id}")
                         return jsonify({'message': 'Collaborator already has read access to this document'}), 409
 
                     # Remove existing edit access if it exists
@@ -201,6 +238,7 @@ class FlaskApp:
                     db.session.add(DocumentReadAccess(document=document, user=collaborator))
                 
                 db.session.commit()
+                logger.info(f"Collaborator {collaborator_email} added with {rights} access to document {document_id}")
                 return jsonify({'message': f'Collaborator {collaborator_email} added with {rights} access to document {document_id}'}), 200
             except Exception as e:
                 db.session.rollback()
@@ -210,12 +248,14 @@ class FlaskApp:
         @self.app.route('/api/thumbnails', methods=['POST'])
         @Auth.rest_auth_required
         def create_thumbnail(user_id):
+            logger.info(f"Creating thumbnail for user: {user_id}")
             data = request.get_json()
             document_id = data.get('document_id')
             image_data = data.get('image_data')  # Assuming base64 encoded image
             #file_format = data.get('file_format', 'PNG')  # Default to PNG
 
             if not image_data:
+                logger.warning("Thumbnail creation failed: Missing image data.")
                 return jsonify({'message': 'Missing image data'}), 400
             
             document = Document.query.get_or_404(document_id)
@@ -231,6 +271,7 @@ class FlaskApp:
                 db.session.add(new_thumbnail)
                 db.session.commit()
 
+                logger.info(f"Thumbnail created successfully for document: {document_id}")
                 return jsonify({
                     'message': 'Thumbnail created successfully',
                     'thumbnail_id': new_thumbnail.id
@@ -238,12 +279,13 @@ class FlaskApp:
 
             except Exception as e:
                 db.session.rollback()
-                print(f"Error during thumbnail creation: {e}")
+                logger.error(f"Error during thumbnail creation: {e}")
                 return jsonify({'message': 'Thumbnail creation failed'}), 500
 
         @self.app.route('/api/thumbnails/<int:thumbnail_id>', methods=['GET'])
         @Auth.rest_auth_required
         def get_thumbnail(user_id, thumbnail_id):
+            logger.info(f"Retrieving thumbnail: {thumbnail_id} for user: {user_id}")
             thumbnail = Thumbnail.query.get_or_404(thumbnail_id)
 
             # Check if the user has access to the document associated with the thumbnail
@@ -254,11 +296,12 @@ class FlaskApp:
                     if not read_access:
                         edit_access = DocumentEditAccess.query.filter_by(document_id=thumbnail.document.id, user_id=user_id).first()
                         if not edit_access:
-                            print(f"Access denied for thumbnail {thumbnail_id}, connected to document: {thumbnail.document.id}, which is connected to user {thumbnail.document.user.id}, while we are {user_id}")
+                            logger.warning(f"Access denied for user: {user_id} to thumbnail: {thumbnail_id}")
                             return jsonify({'message': 'Access denied'}), 403
                        
 
             # Return the thumbnail data
+            logger.info(f"Thumbnail retrieved successfully: {thumbnail_id}")
             return send_file(
                 io.BytesIO(thumbnail.image_data),
                 mimetype=f'image/webp',
@@ -268,6 +311,7 @@ class FlaskApp:
         @self.app.route('/api/thumbnails/<int:thumbnail_id>', methods=['DELETE'])
         @Auth.rest_auth_required
         def delete_thumbnail(user_id, thumbnail_id):
+            logger.info(f"Deleting thumbnail: {thumbnail_id} for user: {user_id}")
             thumbnail = Thumbnail.query.get_or_404(thumbnail_id)
 
             # Check if the user has access to the associated document or is an admin
@@ -277,16 +321,18 @@ class FlaskApp:
                     token = auth_header.split(" ")[1]
                     payload, error = Auth.decode_token(token)
                     if error or not payload.get('is_admin', False):
+                        logger.warning(f"Access denied for user: {user_id} to delete thumbnail: {thumbnail_id}")
                         return jsonify({'message': 'Access denied'}), 403
 
             db.session.delete(thumbnail)
             db.session.commit()
-
+            logger.info(f"Thumbnail deleted successfully: {thumbnail_id}")
             return jsonify({'message': 'Thumbnail deleted successfully'}), 200
         
         @self.app.route('/api/user/create_new_document', methods=['POST'])
         @Auth.rest_auth_required
         def handle_client_create_new_document(user_id):
+            logger.info(f"Creating new document for user: {user_id}")
             try:
                 # Generate a unique document ID and ensure it doesn't already exist
                 while True:
@@ -297,18 +343,18 @@ class FlaskApp:
                 # Create a new document for the user
                 new_document = DocumentManager.create_document(user_id, document_id)
 
-
+                logger.info(f"New document created with ID: {document_id} for user: {user_id}")
                 return jsonify({
                     'documentId': new_document.id
                 })
             
             except IntegrityError as e:
                 db.session.rollback()
-                print("Database integrity error while creating document ", e)
+                logger.error(f"Database integrity error while creating document: {e}")
                 return jsonify({'message': 'Database integrity error'}), 500
 
             except Exception as e:
-                print(f"Authentication or room joining error: {e}")
+                logger.error(f"Authentication or room joining error: {e}")
                 return jsonify({'message': str(e)}), 500
 
 
@@ -316,10 +362,13 @@ class FlaskApp:
         @Auth.rest_auth_required
         def search_documents(user_id):
             search_term = request.args.get('search_term')
+            logger.info(f"Searching documents for user: {user_id} with term: '{search_term}'")
             if not search_term:
+                logger.warning("Document search failed: Missing search term.")
                 return jsonify({'message': 'Missing search term'}), 400
             
             if not user_id:
+                logger.warning("Document search failed: User not found.")
                 return jsonify({'message': 'User not found'}), 404
 
             user = User.query.get_or_404(user_id)
@@ -342,16 +391,17 @@ class FlaskApp:
                 # Remove duplicates (if a document is shared with both read and edit access)
                 unique_documents = list({doc.id: doc for doc in all_accessible_documents}.values())
 
-                print("Getting embeddings for user", user_id)
+                logger.debug(f"Getting embeddings for user: {user_id}")
                 user_embeddings = [EmbeddingManager.get_embeddings(doc) for doc in unique_documents]
-                print("Found", len(user_embeddings), "embeddings for user")
+                logger.debug(f"Found {len(user_embeddings)} embeddings for user")
+
                 # Use the embedding manager to find similar documents
                 similar_file_embeddings = EmbeddingManager.find_similar_files(
                     search_term,
                     embedding_ids=user_embeddings,
                     limit=10
                 )
-                print("Found", len(similar_file_embeddings), "similar documents")
+                logger.debug(f"Found {len(similar_file_embeddings)} similar documents")
                 # Extract the document IDs from the similar file embeddings
                 similar_document_ids = {embedding.document_id for embedding in similar_file_embeddings if embedding.document_id}
 
@@ -381,16 +431,20 @@ class FlaskApp:
                             'updated_at': document.updated_at, 
                             'content': document.content}
                             )
+                        
+                logger.info(f"Document search successful for user: {user_id}")
                 return jsonify(documents_data)
 
             except Exception as e:
-                print(f"Error during document search: {e}")
+                logger.error(f"Error during document search: {e}")
                 return jsonify({'message': 'Error during document search', 'error': str(e)}), 500
 
         @self.app.route('/api/user/documents', methods=['GET'])
         @Auth.rest_auth_required
         def get_user_documents(user_id):
+            logger.info(f"Retrieving documents for user: {user_id}")
             if not user_id:
+                logger.warning("Document retrieval failed: User not found.")
                 return jsonify({'message': 'User not found'}), 404
 
             user = User.query.get_or_404(user_id)
@@ -439,12 +493,15 @@ class FlaskApp:
 
                 documents_data.append(document_info)
 
+            logger.info(f"Documents retrieved successfully for user: {user_id}")
             return jsonify(documents_data)
                     
         @self.app.route('/api/documents/<string:document_id>/collaborators', methods=['GET'])
         @Auth.rest_auth_required
         def get_collaborators(user_id, document_id):
+            logger.info(f"Get collaborators for document: {document_id} for user: {user_id}")
             if not user_id:
+                logger.warning("Collaborator retrieval failed: User not found.")
                 return jsonify({'message': 'User not found'}), 404
 
             # owner sees all other collaborators, others with rights only owner
@@ -455,6 +512,7 @@ class FlaskApp:
                 read_access_entries = DocumentReadAccess.query.filter_by(document_id=document_id).all()
                 edit_access_entries = DocumentEditAccess.query.filter_by(document_id=document_id).all()
                 
+                logger.info(f"Collaborators retrieved successfully for document: {document_id} for user: {user_id}")
                 return jsonify({
                     'documentId': document_id,
                     'status' : 'owner',
@@ -464,8 +522,10 @@ class FlaskApp:
             
             document = Document.query.filter_by(id=document_id).first()
             if not document:
+                logger.warning("Collaborator retrieval failed: Document not found.")
                 return jsonify({'message': 'Document not found'}), 404
             
+            logger.info(f"Owner retrieved successfully for document: {document_id} for user: {user_id}")
             return jsonify({
                 'documentId': document_id,
                 'status' : 'viewer',
@@ -476,16 +536,19 @@ class FlaskApp:
         @self.app.route('/api/user/document/<document_id>', methods=['DELETE'])
         @Auth.rest_auth_required
         def delete_document_user(user_id, document_id):
-            print("Deleting document", document_id, "for user", user_id)
+            logger.info(f"Deleting document: {document_id} for user: {user_id}")
             if not user_id:
+                logger.warning("Document deletion failed: User not found.")
                 return jsonify({'message': 'User not found'}), 404
             
             document = Document.query.filter_by(user_id=user_id, id=document_id).first()
             if not document:
+                logger.warning(f"Document deletion failed: Document not found for ID: {document_id}")
                 return jsonify({'message': 'Document not found'}), 404
             
             db.session.delete(document)
             db.session.commit()
+            logger.info(f"Document deleted successfully: {document_id}")
             return jsonify({'message': 'Document deleted'}), 200
             
         
@@ -493,19 +556,23 @@ class FlaskApp:
         @Auth.rest_auth_required
         def fetch_website():
             url = request.args.get('url')
+            logger.info(f"Fetching website: {url}")
+
             if not url:
+                logger.warning("Website fetch failed: Missing URL parameter.")
                 return jsonify({'error': 'Missing URL parameter'}), 400
 
-            print("Fetching website", url)
+          
             try:
                 response = requests.get(url)
                 response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
 
                 # You might want to adjust the headers depending on what you're sending back
+                logger.info(f"Website fetched successfully: {url}")
                 return response.content, response.status_code, {'Content-Type': response.headers['Content-Type']}
 
             except requests.exceptions.RequestException as e:
-                print(f"Error fetching website: {e}")
+                logger.error(f"Error fetching website: {e}")
                 return jsonify({'error': 'Failed to fetch website', 'message': str(e)}), 500
             
         @self.app.route('/api/extract_text_website', methods=['POST'])
@@ -513,8 +580,10 @@ class FlaskApp:
         def extract_text_website(user_id):
             data = request.get_json()
             url = data.get('url')
-            print("Get url ",url)
+            logger.info(f"Extracting text from website: {url} for user: {user_id}")
+
             if not url:
+                logger.warning("Text extraction failed: Missing URL parameter.")
                 return jsonify({'error': 'Missing URL parameter'}), 400
 
             try:
@@ -527,6 +596,7 @@ class FlaskApp:
                 # Check if the website already exists in the database
                 existing_website = FileContent.query.filter_by(content_hash=content_hash).first()
                 if existing_website:
+                    logger.info(f"Website already exists: {url}")
                     return jsonify({
                         'filename': url,
                         'file_id': existing_website.id,
@@ -569,7 +639,7 @@ class FlaskApp:
 
                 db.session.add(file_content)
                 db.session.commit()
-
+                logger.info(f"Website text extracted and saved successfully: {url}")
                 return jsonify({
                     'filename': url,
                     'file_id': file_content.id,
@@ -586,22 +656,28 @@ class FlaskApp:
                 })
 
             except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to fetch website: {e}")
                 return jsonify({'error': 'Failed to fetch website', 'message': str(e)}), 500
             except Exception as e:
-                print("Error ", e)
+                logger.error(f"An error occurred during website text extraction: {e}")
                 return jsonify({'error': 'An error occurred', 'message': str(e)}), 500
 
         @self.app.route('/api/extract_text', methods=['POST'])
         @Auth.rest_auth_required
         def extract_text_route(user_id):
+            logger.info(f"Text extraction initiated for user: {user_id}")
+
             if not user_id:
+                logger.warning("Text extraction failed: User not found.")
                 return jsonify({'message': 'User not found'}), 404
 
             if 'files' not in request.files:
+                logger.warning("Text extraction failed: No files provided.")
                 return jsonify({'message': 'No files provided'}), 400
 
             files = request.files.getlist('files')
             if not files:
+                logger.warning("Text extraction failed: No files selected.")
                 return jsonify({'message': 'No files selected'}), 400
 
             results = []
@@ -618,7 +694,7 @@ class FlaskApp:
                             try:
                                 file_last_modified = datetime.fromtimestamp(int(file_last_modified_str) / 1000)
                             except (ValueError, TypeError):
-                                print(f"Could not parse last_modified for {filename}")
+                                logger.warning(f"Could not parse last_modified for {filename}")
 
                         content = file.read()
                         filename = secure_filename(file.filename)
@@ -629,6 +705,7 @@ class FlaskApp:
                         # Check if file already exists
                         existing_file = FileContent.query.filter_by(content_hash=content_hash).first()
                         if existing_file:
+                            logger.debug(f"File already exists: {filename}")
                             results.append({
                                 'filename': filename,
                                 'file_id': existing_file.id,
@@ -658,11 +735,12 @@ class FlaskApp:
                             file_content.text_content_hash = file_content_data['text_content_hash']
                         except Exception as text_error:
                             # If text extraction fails, continue without text content
-                            print(f"Text extraction failed: {str(text_error)}")
+                            logger.error(f"Text extraction failed: {str(text_error)}")
                         
                         db.session.add(file_content)
                         db.session.commit()
                         
+                        logger.info(f"File processed: {filename}")
                         results.append({
                             'filename': filename,
                             'file_id': file_content.id,
@@ -673,18 +751,21 @@ class FlaskApp:
                         })
                         
                     except Exception as e:
+                        logger.error(f"Error processing file {file.filename}: {e}")
                         results.append({
                             'filename': file.filename,
                             'error': str(e),
                             'success': False
                         })
                 else:
+                    logger.warning("Invalid file encountered.")
                     results.append({
                         'filename': 'unknown',
                         'error': 'Invalid file',
                         'success': False
                     })
             
+            logger.info("Text extraction completed.")
             return jsonify({
                 'success': True,
                 'results': results
@@ -693,7 +774,10 @@ class FlaskApp:
         @self.app.route('/api/user/content', methods=['GET'])
         @Auth.rest_auth_required
         def get_user_content(user_id):
+            logger.info(f"Retrieving user content for user: {user_id}")
+
             if not user_id:
+                logger.warning("User content retrieval failed: User not found.")
                 return jsonify({'message': 'User not found'}), 404
 
             # Query the database for all FileContent entries associated with the user
@@ -708,15 +792,19 @@ class FlaskApp:
                 'last_modified_date': item.last_modified,
             } for item in content_items]
 
+            logger.info(f"User content retrieved successfully for user: {user_id}")
             return jsonify(content_data)
 
         @self.app.route('/api/content/<int:content_id>', methods=['GET'])
         @Auth.rest_auth_required
         def get_content_file(user_id, content_id):
+            logger.info(f"Retrieving content file: {content_id} for user: {user_id}")
+
             # Fetch the FileContent entry by ID and ensure it belongs to the current user
             content_entry = FileContent.query.filter_by(id=content_id, user_id=user_id).first()
             
             if not content_entry:
+                logger.warning(f"Content file not found or access denied for ID: {content_id}, user: {user_id}")
                 return jsonify({'message': 'Content not found or access denied'}), 404
             
             content_data = {
@@ -731,17 +819,22 @@ class FlaskApp:
             }
 
             # Serve the file from the temporary directory
+            logger.info(f"Content file retrieved successfully: {content_id}")
             return jsonify(content_data)
 
         @self.app.route('/api/upload_structure', methods=['POST'])
         @Auth.rest_auth_required
         def handle_structure_upload(user_id):
+            logger.info(f"Structure upload initiated by user: {user_id}")
+            
             if 'file' not in request.files:
+                logger.warning("Structure upload failed: No file part.")
                 return jsonify({'message': 'No file part'}), 400
             
             file = request.files['file']
             
             if file.filename == '':
+                logger.warning("Structure upload failed: No selected file.")
                 return jsonify({'message': 'No selected file'}), 400
             
             if file:
@@ -762,31 +855,37 @@ class FlaskApp:
                     # Optionally, remove the temporary file
                     os.remove(filepath)
                     
+                    logger.info(f"Document structure converted successfully for user: {user_id}")
                     return jsonify({
                         'message': 'Document converted successfully',
                         'markdown': markdown_content
                     }), 200
                 except subprocess.CalledProcessError as e:
-                    print("Error ", e)
+                    logger.error(f"Error during document conversion: {e}")
                     return jsonify({'message': 'Failed to convert document', 'error': str(e)}), 500
             
+            logger.warning("Structure upload failed: File upload failed.")
             return jsonify({'message': 'Failed to upload file'}), 500
+            
         # Admin routes
         @self.app.route('/api/admin', methods=['GET'])
         @Auth.rest_admin_auth_required
         def admin():
+            logger.info("Admin access granted.")
             return jsonify({'message': 'Admin access granted'})
 
         @self.app.route('/api/admin/users', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_users():
-            # Implementation to get users
+            logger.info("Retrieving all users for admin.")
             users = User.query.all()
+            logger.info(f"Retrieved {len(users)} users.")
             return jsonify([{'id': user.id, 'email': user.email, 'is_admin': user.is_admin, 'last_login_at': user.last_login_at} for user in users])
 
         @self.app.route('/api/admin/documents', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_documents():
+            logger.info("Retrieving all documents for admin.")
             documents = Document.query.all()
             document_list = []
             for doc in documents:
@@ -822,13 +921,13 @@ class FlaskApp:
 
                 document_list.append(doc_info)
 
-               
-
+            logger.info(f"Retrieved {len(document_list)} documents.")
             return jsonify(document_list)
         
         @self.app.route('/api/admin/file_contents', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_file_contents_list():
+            logger.info("Retrieving all file contents for admin.")
             file_contents = FileContent.query.all()
             file_content_list = []
             for file_content in file_contents:
@@ -844,11 +943,13 @@ class FlaskApp:
                     'user_id': file_content.user_id,
                 })
 
+            logger.info(f"Retrieved {len(file_content_list)} file contents.")
             return jsonify(file_content_list)
         
         @self.app.route('/api/admin/file_embeddings', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_file_embeddings():
+            logger.info("Retrieving all file embeddings for admin.")
             file_embeddings = FileEmbedding.query.all()
             file_embedding_list = []
             for file_embedding in file_embeddings:
@@ -858,54 +959,65 @@ class FlaskApp:
                     'content_id': file_embedding.content_id,
                     'creation_date': file_embedding.creation_date,
                 })
-
+            logger.info(f"Retrieved {len(file_embedding_list)} file embeddings.")
             return jsonify(file_embedding_list)
            
         # DELETE a user
         @self.app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
         @Auth.rest_admin_auth_required
         def delete_user(user_id):
+            logger.info(f"Deleting user: {user_id}")
             user = User.query.get_or_404(user_id)
             documents_from_user = Document.query.filter_by(user_id=user_id).all()
             for document in documents_from_user:
+                logger.info(f"Deleting document: {document.id} owned by user: {user_id}")
                 db.session.delete(document)
             db.session.delete(user)
             db.session.commit()
+            logger.info(f"User deleted successfully: {user_id}")
             return jsonify({'message': 'User deleted'}), 200
 
         # Make a user an admin
         @self.app.route('/api/admin/users/<int:user_id>/make-admin', methods=['PATCH'])
         @Auth.rest_admin_auth_required
         def make_user_admin(user_id):
+            logger.info(f"Making user admin: {user_id}")
             user = User.query.get_or_404(user_id)
             user.is_admin = True
             db.session.commit()
+            logger.info(f"User is now an admin: {user_id}")
             return jsonify({'message': 'User is now an admin'}), 200
         
         # Remove admin rights
         @self.app.route('/api/admin/users/<int:user_id>/remove-admin', methods=['PATCH'])
         @Auth.rest_admin_auth_required
         def remove_user_admin(user_id):
+            logger.info(f"Removing admin rights from user: {user_id}")
             user = User.query.get_or_404(user_id)
             user.is_admin = False
             db.session.commit()
+            logger.info(f"Admin rights removed from user: {user_id}")
             return jsonify({'message': 'User is no longer an admin'}), 200
 
         # DELETE a document
         @self.app.route('/api/admin/documents/<string:document_id>', methods=['DELETE'])
         @Auth.rest_admin_auth_required
         def delete_document(document_id):
+            logger.info(f"Deleting document: {document_id}")
             document = Document.query.get_or_404(document_id)
             db.session.delete(document)
             db.session.commit()
+            logger.info(f"Document deleted successfully: {document_id}")
             return jsonify({'message': 'Document deleted'}), 200
         
         # GET a document
         @self.app.route('/api/admin/documents/<string:document_id>', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_document(document_id):
+            logger.info(f"Retrieving document: {document_id}")
             document = Document.query.get_or_404(document_id)
             if document.thumbnail:
+                logger.info(f"Document retrieved: {document_id} with thumbnail")
                 return jsonify({
                     'id': document.id, 
                     'thumbnail_id': document.thumbnail.id,
@@ -916,6 +1028,7 @@ class FlaskApp:
                     'updated_at': document.updated_at,
                     'content': document.content})
             
+            logger.info(f"Document retrieved: {document_id} without thumbnail")
             return jsonify({
                 'id': document.id, 
                 'title': document.title, 
@@ -929,8 +1042,10 @@ class FlaskApp:
         @self.app.route('/api/admin/file_contents/<int:file_content_id>', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_file_content(file_content_id):
+            logger.info(f"Retrieving file content: {file_content_id}")
             file_content = FileContent.query.get_or_404(file_content_id)
             
+            logger.info(f"File content retrieved: {file_content_id}")
             return jsonify(
                 {
                 'id': file_content.id,
@@ -950,14 +1065,17 @@ class FlaskApp:
         @self.app.route('/api/admin/file_contents/<int:file_content_id>', methods=['DELETE'])
         @Auth.rest_admin_auth_required
         def delete_file_content(file_content_id):
+            logger.info(f"Deleting file content: {file_content_id}")
             file_content = FileContent.query.get_or_404(file_content_id)
             db.session.delete(file_content)
             db.session.commit()
+            logger.info(f"File content deleted successfully: {file_content_id}")
             return jsonify({'message': 'FileContent deleted'}), 200
         
         @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_file_embedding(file_embedding_id):
+            logger.info(f"Retrieving file embedding: {file_embedding_id}")
             file_embedding = FileEmbedding.query.get_or_404(file_embedding_id)
             sequence_embeddings = []
             for sequence_embedding in file_embedding.sequences:
@@ -968,6 +1086,7 @@ class FlaskApp:
                     'embedding': sequence_embedding.embedding.tolist(),
                 })
             
+            logger.info(f"File embedding retrieved: {file_embedding_id}")
             return jsonify({
                 'id': file_embedding.id,
                 'document_id': file_embedding.document_id,
@@ -979,14 +1098,17 @@ class FlaskApp:
         @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>', methods=['DELETE'])
         @Auth.rest_admin_auth_required
         def delete_file_embedding(file_embedding_id):
+            logger.info(f"Deleting file embedding: {file_embedding_id}")
             file_embedding = FileEmbedding.query.get_or_404(file_embedding_id)
             db.session.delete(file_embedding)
             db.session.commit()
+            logger.info(f"File embedding deleted successfully: {file_embedding_id}")
             return jsonify({'message': 'File embedding deleted'}), 200
         
         @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>/sequences', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_file_embedding_sequences(file_embedding_id):
+            logger.info(f"Retrieving sequences for file embedding: {file_embedding_id}")
             file_embedding = FileEmbedding.query.get_or_404(file_embedding_id)
             sequence_embeddings = []
             for sequence_embedding in file_embedding.sequences:
@@ -996,17 +1118,21 @@ class FlaskApp:
                     'sequence_text': sequence_embedding.sequence_text,
                 })
 
+            logger.info(f"Sequences retrieved for file embedding: {file_embedding_id}")
             return jsonify(sequence_embeddings)
 
         @self.app.route('/api/admin/file_embeddings/<int:file_embedding_id>/sequences/<int:sequence_embedding_id>', methods=['GET'])
         @Auth.rest_admin_auth_required
         def get_sequence_embedding(file_embedding_id, sequence_embedding_id):
+            logger.info(f"Retrieving sequence embedding: {sequence_embedding_id} for file embedding: {file_embedding_id}")
             sequence_embedding = SequenceEmbedding.query.get_or_404(sequence_embedding_id)
 
             # Check if the sequence embedding belongs to the specified file embedding
             if sequence_embedding.file_id != file_embedding_id:
+                logger.warning(f"Sequence embedding {sequence_embedding_id} does not belong to file embedding {file_embedding_id}")
                 return jsonify({'message': 'Sequence embedding not found for the specified file embedding'}), 404
             
+            logger.info(f"Sequence embedding retrieved: {sequence_embedding_id}")
             return jsonify({
                 'id': sequence_embedding.id,
                 'sequence_hash': sequence_embedding.sequence_hash,
@@ -1016,10 +1142,12 @@ class FlaskApp:
 
         @self.app.route('/health')
         def health_check():
+            logger.debug("Health check requested.")
             return jsonify({"status": "healthy"})
             
         @self.app.route('/api/test')
         def test_endpoint():
+            logger.debug("Test endpoint requested.")
             return jsonify({"message": "API is working"})
         
         @self.app.after_request
