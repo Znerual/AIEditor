@@ -7,15 +7,16 @@ from utils import delta_to_string, string_to_delta
 
 class DocumentManager:
     @staticmethod
-    def get_or_create_document(user_id: str, document_id: Optional[int] = None) -> Document:
+    def create_document(user_id: str, document_id: Optional[int] = None) -> Document:
         if document_id:
-            document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+            document = Document.query.filter_by(id=document_id).first()
             if document:
-                return document
+                raise ValueError(f"Document with ID {document_id} already exists")
+        
             
-        user = User.query.filter_by(user_id=user_id).first()
+        user = User.query.filter_by(id=user_id).first()
                 
-        document = Document(user=user, content={"ops": []})
+        document = Document(id=document_id, user=user, content={"ops": [{"insert": "\n"}]})
         db.session.add(document)
         db.session.commit()
         return document
