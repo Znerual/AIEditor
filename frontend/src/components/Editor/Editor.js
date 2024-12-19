@@ -570,17 +570,18 @@ export const Editor = ({ documentId }) => {
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
         log('EDITOR_CHANGE', "Editor change triggered", source);
+        log('EDITOR_CHANGE', 'content', content);  
+        log('EDITOR_CHANGE', 'delta content', editor.getContents());
+        log('EDITOR_CHANGE', 'delta', delta);
         setEditorContentD(content);
         if (source === 'user' && !showAutocompletionSuggestions) {
             const range = editor.getSelection();
-            log('EDITOR_CHANGE', "Range ", range);
-            let index;
             if (!range) {
                 log('EDITOR_CHANGE', "Editor change triggered, no range");
-                index = editor.getLength();
-            } else {
-                index = range.index;
+                return;
             }
+         
+            const index = range.index;
             emit('client_text_change', {
                 delta: delta.ops,
                 documentId: documentId,

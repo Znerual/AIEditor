@@ -203,7 +203,6 @@ class SocketManager:
         @self._socketio.on('client_request_suggestions')
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_client_request_suggestions(user_id, data):
-
             try:
                 document_id = data.get('documentId')
                 cursor_position = data.get('cursorPosition', 0)
