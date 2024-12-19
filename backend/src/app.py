@@ -3,6 +3,7 @@ from datetime import datetime
 import hashlib
 import subprocess
 import uuid
+from document_manager import DocumentManager
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -293,14 +294,11 @@ class FlaskApp:
                         break
 
                 # Create a new document for the user
-                new_document = Document(id=document_id, user_id=user_id)
-                new_document.apply_delta(Delta([{'insert' : 'Hallo das ist ein Testdokument'}]))
-                db.session.add(new_document)
-                db.session.commit()
+                new_document = DocumentManager.create_document(user_id, document_id)
 
 
                 return jsonify({
-                    'documentId': document_id
+                    'documentId': new_document.id
                 })
             
             except IntegrityError as e:
