@@ -99,10 +99,10 @@ class DialogManager:
             self.execution_model = genai.GenerativeModel(
                 'gemini-1.5-flash-latest',
                 safety_settings={
-                    "harassment": "block_none",
-                    "hate-speech": "block_none",
-                    "sexually-explicit": "block_none",
-                    "dangerous-content": "block_none",
+                    "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
                 },
                 generation_config={
                     "temperature": 0.2
