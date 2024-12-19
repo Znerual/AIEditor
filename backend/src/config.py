@@ -1,5 +1,4 @@
 class Config:
-    SECRET_KEY = 'secret!'
     DEBUG = True
     SHOW_EMIT_SUCCESS = False
     # Allow connections from React development server
