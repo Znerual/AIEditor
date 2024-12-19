@@ -162,6 +162,7 @@ class FlaskApp:
             document = Document.query.filter_by(id=document_id).first()
             if not document:
                 return jsonify({'message': 'Document not found'}), 404
+            
             if int(document.user_id) != int(user_id):
                 return jsonify({'message': 'Only the document owner can add collaborators'}), 403
 
@@ -184,7 +185,7 @@ class FlaskApp:
                         db.session.delete(read_access)
 
                     # Add edit access
-                    db.session.add(DocumentEditAccess(document_id=document_id, user_id=collaborator.id))
+                    db.session.add(DocumentEditAccess(document=document, user=collaborator))
                 else:
                     # Check for existing read access
                     read_access = DocumentReadAccess.query.filter_by(document_id=document_id, user_id=collaborator.id).first()
@@ -197,7 +198,7 @@ class FlaskApp:
                         db.session.delete(edit_access)
 
                     # Add read access
-                    db.session.add(DocumentReadAccess(document_id=document_id, user_id=collaborator.id))
+                    db.session.add(DocumentReadAccess(document=document, user=collaborator))
                 
                 db.session.commit()
                 return jsonify({'message': f'Collaborator {collaborator_email} added with {rights} access to document {document_id}'}), 200
@@ -440,6 +441,36 @@ class FlaskApp:
 
             return jsonify(documents_data)
                     
+        @self.app.route('/api/documents/<string:document_id>/collaborators', methods=['GET'])
+        @Auth.rest_auth_required
+        def get_collaborators(user_id, document_id):
+            if not user_id:
+                return jsonify({'message': 'User not found'}), 404
+
+            # owner sees all other collaborators, others with rights only owner
+            user = User.query.get_or_404(user_id)
+                        
+            owns_document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+            if owns_document:
+                read_access_entries = DocumentReadAccess.query.filter_by(document_id=document_id).all()
+                edit_access_entries = DocumentEditAccess.query.filter_by(document_id=document_id).all()
+                
+                return jsonify({
+                    'documentId': document_id,
+                    'status' : 'owner',
+                    'read_access_entries': [{ 'user' : { 'id' : entry.user.id, 'email' : entry.user.email } } for entry in read_access_entries],
+                    'edit_access_entries': [{ 'user' : { 'id' : entry.user.id, 'email' : entry.user.email } } for entry in edit_access_entries],
+                })
+            
+            document = Document.query.filter_by(id=document_id).first()
+            if not document:
+                return jsonify({'message': 'Document not found'}), 404
+            
+            return jsonify({
+                'documentId': document_id,
+                'status' : 'viewer',
+                'owner' : { 'id' : document.user.id, 'email' : document.user.email },
+            })
 
         
         @self.app.route('/api/user/document/<document_id>', methods=['DELETE'])
