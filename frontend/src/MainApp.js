@@ -1,7 +1,8 @@
+// frontend/src/MainApp.js
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { ShareModal } from './components/Collaboration/ShareModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Trash2, Upload, Users } from 'lucide-react';
 import './styles/mainApp.css'; // Make sure to create this CSS file
 
@@ -17,9 +18,14 @@ export const MainApp = () => {
     const [thumbnailURLs, setThumbnailURLs] = useState({}); // Store object URLs for thumbnails
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [selectedDocumentId, setSelectedDocumentId] = useState(null);
-    const { token } = useAuth();
+    const { token, user, logout } = useAuth();
     const fileInputRef = useRef(null);
     const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login'); // Navigate to the root route, which is your MainApp/Landing Page
+    };
 
     const handleDocumentSelect = useCallback((documentId) => {
         navigate(`/editor/${documentId}`);
@@ -238,6 +244,16 @@ export const MainApp = () => {
                 <button onClick={handleSearchModeChange} className="search-mode-button">
                     {searchMode === 'keyword' ? 'Keyword' : 'Embedding'}
                 </button>
+                
+                {user?.isAdmin && (
+                    <Link to="/admin" className='admin-button'>
+                        Admin
+                    </Link>
+                )}
+                <button variant="outline" onClick={handleLogout} className='logout-button'>
+                    Logout
+                </button>
+                
             </div>
             <div className='container'>
                 <h1>Your Documents</h1>
