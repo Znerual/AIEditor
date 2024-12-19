@@ -1,3 +1,4 @@
+// frontend/src/components/Sidebar/SelectDocumentModal.js
 import { useState, useEffect } from 'react';
 
 // Modal component for selecting existing documents

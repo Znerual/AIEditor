@@ -1,3 +1,4 @@
+// frontend/src/components/Collaboration/ShareModal.js
 import React, { useState, useCallback, useEffect } from 'react';
 import { User, X } from 'lucide-react';
 import '../../styles/shareModal.css';
