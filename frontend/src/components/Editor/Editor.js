@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
+//import 'quill-paste-smart';
 import SuggestionBlot from './SuggestionBlot';
 import CompletionBlot from './CompletionBlot';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -30,13 +31,13 @@ const DEBUG_FLAGS = {
     TITLE: false,
     STRUCTURE: false,
     CONTENT: false,
-    CHAT: true,
+    CHAT: false,
     AUTOCOMPLETION: true,
-    GET_CONTENT: true,
+    GET_CONTENT: false,
     USER_EVENTS: false,
-    SERVER_EVENTS: true,
-    EDITOR_CHANGE: true,
-    SUGGESTION_LOGIC: true,
+    SERVER_EVENTS: false,
+    EDITOR_CHANGE: false,
+    SUGGESTION_LOGIC: false,
 };
 
 const log = (flag, message, ...args) => {
@@ -68,6 +69,7 @@ export const Editor = ({ documentId }) => {
     const [suggestedEdits, setSuggestedEdits] = useState([]);
     const [showStructureConfirmation, setShowStructureConfirmation] = useState(false);
     const [restructuredDocument, setRestructuredDocument] = useState('');
+    const requestCounter = useRef(0);
     const lastRequestIdRef = useRef(null); // Use a ref to allow for latest updates without rerendering
     const debounceTimerRef = useRef(null);
     const pendingRequestRef = useRef(null);
@@ -79,7 +81,7 @@ export const Editor = ({ documentId }) => {
     //     backgroundColor: '#f0f0f0',
     // };
 
-    const DEBOUNCE_WAITING_TIME = 100; // Time in milliseconds to wait before sending a request
+    const DEBOUNCE_WAITING_TIME = 500; // Time in milliseconds to wait before sending a request
 
     const handleAuthenticationFailed = useCallback((event) => {
         log('AUTH', "Authentication failed", event);
@@ -518,7 +520,7 @@ export const Editor = ({ documentId }) => {
 
         const quill = quillRef.current;
         data.deltas_ops.forEach((delta) => {
-            quill.updateContents(delta);
+            quill.updateContents(delta, 'silent');
         });
     },[]);
 
@@ -570,25 +572,32 @@ export const Editor = ({ documentId }) => {
 
     const handleEditorChange = useCallback((content, delta, source, editor) => {
         log('EDITOR_CHANGE', "Editor change triggered", source);
+        log('EDITOR_CHANGE', "showAutocompletionSuggestion", showAutocompletionSuggestions);
         log('EDITOR_CHANGE', 'content', content);  
         log('EDITOR_CHANGE', 'delta content', editor.getContents());
         log('EDITOR_CHANGE', 'delta', delta);
         setEditorContentD(content);
         if (source === 'user' && !showAutocompletionSuggestions) {
-            const range = editor.getSelection();
-            if (!range) {
-                log('EDITOR_CHANGE', "Editor change triggered, no range");
-                return;
-            }
-         
-            const index = range.index;
+            
             emit('client_text_change', {
                 delta: delta.ops,
                 documentId: documentId,
             });
 
-            // use execution guard to prevent multiple requests
+            const range = editor.getSelection();
+            if (!range) {
+                log('EDITOR_CHANGE', "Editor change triggered, no range");
+                return;
+            }
+            const index = range.index;
+            
+            // Clear the previous timer
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+
             // Update the latest pending request data
+            // use execution guard to prevent multiple requests
             lastRequestIdRef.current = Date.now();
             pendingRequestRef.current = {
                 documentId,
@@ -596,10 +605,7 @@ export const Editor = ({ documentId }) => {
                 requestId: lastRequestIdRef.current, // Generate a unique request ID
             };
 
-            // Clear the previous timer
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-            }
+            
 
             // Set up a new debounce timer
             debounceTimerRef.current = setTimeout(() => {
@@ -607,13 +613,18 @@ export const Editor = ({ documentId }) => {
                 if (pendingRequestRef.current) {
                     const { documentId, cursorPosition, requestId } = pendingRequestRef.current;
 
-                    // Emit the latest pending request
-                    log('EDITOR_CHANGE', "Emitting latest request:", requestId);
-                    emit('client_request_suggestions', {
-                        documentId,
-                        cursorPosition,
-                        requestId,
-                    });
+                    if (requestId === lastRequestIdRef.current) {
+                        // Emit the latest pending request
+                        requestCounter.current = requestCounter.current + 1;
+                        log('AUTOCOMPLETION', "Emitting latest request:", requestId, " total, ", requestCounter.current, " requests emitted.");
+                        emit('client_request_suggestions', {
+                            documentId,
+                            cursorPosition,
+                            requestId,
+                        });
+                    } else {
+                        log('AUTOCOMPLETION', "Discarding outdated request:", requestId);
+                    }
 
                     // Clear the pending request data after emitting
                     pendingRequestRef.current = null;
