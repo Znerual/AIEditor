@@ -73,8 +73,8 @@ class Document(db.Model):
         
         composed_delta = Delta()  # Start with an empty Delta
         for op in current_content.ops:
-            composed_delta = composed_delta.compose(Delta([op]))
-        
+            composed_delta = Delta([op]).compose(composed_delta)
+          
         # Compose the deltas
         new_content = composed_delta.compose(delta)
         
