@@ -93,10 +93,14 @@ class FlaskApp:
             ping_interval=25000,
             manage_session=True,
             always_connect=True,
-            #path='socket.io'
+            
         )
 
-        gemini_api_key = "1234" # read from environment variables
+        gemini_api_key = os.getenv("GEMINI_API_KEY") # read from environment variables
+        if not gemini_api_key:
+            logger.error("GEMINI_API_KEY environment variable not set")
+            exit(1)
+        # gemini_api_key = "1234" # read from environment variables
 
         self.socket_manager = SocketManager(socketio, gemini_api_key, debug=Config.DEBUG)
         # self.socket_manager.init_socket_manager()

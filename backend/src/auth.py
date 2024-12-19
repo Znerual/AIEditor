@@ -5,11 +5,13 @@ from events import WebSocketEvent
 from flask import request, jsonify
 from flask_socketio import disconnect
 import jwt
+import os
 from datetime import datetime, timedelta, timezone
 from models import User
 
 class Auth:
-    SECRET_KEY = 'your-secret-key'  # Move to environment variables in production
+    SECRET_KEY = os.getenv('EDDY_SECRET_KEY')
+    
     @staticmethod
     def generate_token(user_id: str, is_admin: bool) -> str:
         payload = {
