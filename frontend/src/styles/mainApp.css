@@ -104,19 +104,56 @@ background-color: #ffbcb4;
 
 .document-info {
   padding: 15px;
+  font-size: 0.9rem;
+  color: #555; /* A neutral color for text */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* Distribute space between top and bottom */
+  flex-grow: 1; /* Allow document-info to grow and fill available space */
+}
+
+.document-info > div:first-child {
+  margin-bottom: auto; /* Push the dates to the bottom */
 }
 
 .document-info h2 {
   margin-top: 0;
-  margin-bottom: 5px;
+  margin-bottom: 10px; /* Increased spacing */
   font-size: 1.2rem;
-  color: #282c34; /* Dark gray for text */
+  color: #282c34; /* Dark gray for title */
+  font-weight: 600; /* Make title bolder */
 }
 
-.document-info p {
-  margin: 5px 0;
-  font-size: 0.9rem;
-  color: #555;
+.document-dates {
+  margin-top: auto; /* Push the dates to the bottom */
+}
+
+.document-id,
+.creation-date,
+.modification-date {
+  display: flex; /* Align icon and text */
+  align-items: center; /* Center align vertically */
+  margin-bottom: 5px; /* Space between lines */
+}
+
+.document-id {
+  font-size: 0.8rem; /* Smaller font size for ID */
+  color: #777; /* Lighter text color for ID */
+}
+
+.document-info i {
+  margin-right: 8px; /* Space between icon and text */
+  width: 18px; /* Fixed width for alignment */
+  text-align: center; /* Center the icon within the space */
+}
+
+/* Using a more specific selector to style the icons */
+.document-info .creation-date i {
+    color: #3498db; /* Color for creation icon */
+}
+
+.document-info .modification-date i {
+    color: #f39c12; /* Color for modification icon */
 }
 
 

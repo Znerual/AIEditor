@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { ShareModal } from './components/Collaboration/ShareModal';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Trash2, Upload, Users } from 'lucide-react';
+import { Plus, Trash2, Upload, Users, CalendarPlus, Edit } from 'lucide-react';
 import './styles/mainApp.css'; // Make sure to create this CSS file
 
 
@@ -313,15 +313,16 @@ export const MainApp = () => {
                                     </div>
                                     <div className={`document-info ${doc.access_level}`}>
                                         <h2>{doc.title}</h2>
-                                        {!doc.title && <p>ID: {doc.id}</p>}
-                                        <p>Created: {new Date(doc.created_at).toLocaleString()}</p>
-                                        <p>Modified: {new Date(doc.updated_at).toLocaleString()}</p>
-                                        <p>User ID: {doc.user_id}</p>
-                                        <div className='document-collaborators'>
-                                            <p>Collaborators:</p>
-                                            <div className='collaborators-list'>
-                                                {/* Map over collaborators when available */}
-                                            </div>
+                                        {!doc.title && <p className="document-id">ID: {doc.id}</p>}
+                                        <div className="document-dates">
+                                        <p className="creation-date">
+                                            <CalendarPlus size={18} className="icon-spacing" />
+                                            {new Date(doc.created_at).toLocaleString()}
+                                        </p>
+                                        <p className="modification-date">
+                                            <Edit size={18} className="icon-spacing" />
+                                            {new Date(doc.updated_at).toLocaleString()}
+                                        </p>
                                         </div>
                                     </div>
                                 </div>
