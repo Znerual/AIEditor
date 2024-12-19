@@ -239,9 +239,10 @@ class AutocompleteManager:
             
             Based on both the current context and related information, provide 3 brief, 
             relevant completion suggestions that would be most helpful for continuing the text.
-            Prefer specific, contextual completions over generic ones.
+            Prefer specific, contextual completions over generic ones. 
+            Only output the suggestions, one per line.
             """
-            
+            print(prompt)
             logging.debug(f"Sending prompt to model: {prompt[:200]}...")
             response = self.model.generate_content(prompt)
             
