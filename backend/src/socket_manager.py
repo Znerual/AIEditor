@@ -184,10 +184,10 @@ class SocketManager:
                     self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
                     return
                 
-                print("Text change data: " ,data)
+                #print("Text change data: " ,data)
                 # User ID comes from the token, not the request
                 updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
-                print("Updated content: ", updated_content)
+                #print("Updated content: ", updated_content)
                 # Broadcast the delta to all other clients in the same document room (except the sender)
                 self.emit_event(WebSocketEvent('server_text_change', {
                                     'delta' : delta,
@@ -218,8 +218,9 @@ class SocketManager:
                 if not document:
                     raise ValueError("Document not found")
                 
+                #print("Document", document)
                 content_str = DocumentManager.get_document_content(document, user_id, as_string=True)
-
+                #print("Content str", content_str)
                  # Get and emit autocompletion suggestions
                 suggestions = self._autocomplete_manager.get_suggestions(
                     user_id=user_id,
