@@ -268,7 +268,11 @@ class DialogManager:
             action_plan_response = self.planning_model.generate_content(action_plan_prompt)
             action_plan = action_plan_response.text
         else:
-            action_plan_response = self.planning_model.generate_content(action_plan_prompt)
+            action_plan_response = self.planning_model.generate_content(
+                action_plan_prompt, generation_config=genai.GenerationConfig(
+                response_mime_type="application/json"
+                ),
+            )
             action_plan = action_plan_response.text
             try:
                 # Attempt to parse the action plan as JSON
