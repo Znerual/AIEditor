@@ -23,7 +23,7 @@ class DocumentManager:
     
     @staticmethod
     def apply_delta(document_id: str, delta: dict) -> dict:
-        document = Document.query.get(id=document_id)
+        document = Document.query.get(document_id)
         if not document:
             raise ValueError("Document not found")
             
@@ -35,7 +35,7 @@ class DocumentManager:
     def get_document_content(document: Union[str, Document], as_string=False) -> Union[dict, str]:
         if isinstance(document, str):
             document_id = document
-            document = Document.query.get(id=document_id)
+            document = Document.query.get(document_id)
         
         if not document:
             raise ValueError("Document not found")
