@@ -137,7 +137,7 @@ export const Editor = ({ documentId }) => {
     }, []);
 
     const handleChatAnswerIntermediary = useCallback((data) => {
-        const { intermediary } = data;
+        const  intermediary = data;
         log('CHAT', 'Received intermediary chat answer:', intermediary);
         if (!intermediary || !intermediary.status) {
             log('ERROR', 'No status found in intermediary chat answer');
@@ -179,6 +179,7 @@ export const Editor = ({ documentId }) => {
                 break;
             default:
                 log('ERROR', `Unknown status: ${intermediary.status}`);
+                console.error(`Unknown status: ${intermediary.status}`);
                 message = `Unknown status: ${intermediary.status}`;
                 break;
         }
