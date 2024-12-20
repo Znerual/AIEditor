@@ -278,7 +278,7 @@ export const Editor = ({ documentId }) => {
             if (event.documentId != documentId) {
                 log('STRUCTURE', "Document ID mismatch");
             }
-            setRestructuredDocument(event);
+            setRestructuredDocument(event.content);
             setShowStructureConfirmation(true);
         }
     }, [documentId]);
@@ -735,11 +735,12 @@ export const Editor = ({ documentId }) => {
             log('STRUCTURE', 'No restructuredDocument found');
             return;
         }
-        quillRef.current.setText(restructuredDocument, 'silent');
+        setEditorContentD(restructuredDocument);
+        //quillRef.current.setText(restructuredDocument, 'silent');
         setShowStructureConfirmation(false);
         // Optionally, clear the restructuredDocument state if you don't need it anymore
+        emit('client_structure_accepted', {'documentId' : documentId, 'content': restructuredDocument});
         setRestructuredDocument('');
-        emit('client_structure_accepted', );
     }, [restructuredDocument]);
     
     const handleRejectStructure = useCallback(() => {
@@ -803,7 +804,7 @@ export const Editor = ({ documentId }) => {
                     <div className="structure-preview">
                         <h3>Proposed Structure</h3>
                         <ReactQuill
-                        value={restructuredDocument.content}
+                        value={restructuredDocument}
                         readOnly={true}
                         theme="bubble"
                         />
