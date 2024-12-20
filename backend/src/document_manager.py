@@ -32,7 +32,7 @@ class DocumentManager:
         return updated_content
     
     @staticmethod
-    def get_document_content(document: Union[str, Document], user_id: Optional[int] = None, as_string=False) -> dict:
+    def get_document_content(document: Union[str, Document], user_id: Optional[int] = None, as_string=False) -> Union[dict, str]:
         if isinstance(document, str):
             if not user_id:
                 raise ValueError("user_id is required when passing a document_id as a string")
@@ -44,6 +44,6 @@ class DocumentManager:
         
         if as_string:
             # Convert Delta to string
-            return delta_to_string(document.get_current_delta()) # You'll need to implement `to_plain_text()`
+            return delta_to_string(document.get_current_delta()) # type: ignore
         else:
-            return document.get_current_delta()
+            return document.get_current_delta() # type: ignore
