@@ -22,8 +22,8 @@ class DocumentManager:
         return document
     
     @staticmethod
-    def apply_delta(document_id: int, user_id: str, delta: dict) -> dict:
-        document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+    def apply_delta(document_id: str, delta: dict) -> dict:
+        document = Document.query.get(id=document_id)
         if not document:
             raise ValueError("Document not found")
             
@@ -32,12 +32,10 @@ class DocumentManager:
         return updated_content
     
     @staticmethod
-    def get_document_content(document: Union[str, Document], user_id: Optional[int] = None, as_string=False) -> Union[dict, str]:
+    def get_document_content(document: Union[str, Document], as_string=False) -> Union[dict, str]:
         if isinstance(document, str):
-            if not user_id:
-                raise ValueError("user_id is required when passing a document_id as a string")
             document_id = document
-            document = Document.query.filter_by(id=document_id, user_id=user_id).first()
+            document = Document.query.get(id=document_id)
         
         if not document:
             raise ValueError("Document not found")
