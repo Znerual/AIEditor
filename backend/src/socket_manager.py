@@ -402,21 +402,25 @@ class SocketManager:
         @self._socketio.on('client_chat')
         @Auth.socket_auth_required(emit_event=self.emit_event)
         def handle_chat_event(user_id, msg):
-            document_id = session.get('document_id')  # Get document_id from session
-            response_data = self._dialog_manager.get_response(user_id, msg['text'], document_id, self.current_content_selection)
+            document_id = session.get('document_id')
 
-            # TODO, how to deal with chat if only read access is given?
-            # Maybe allow chat, but no edits
-            # Emit response and suggested edits
+            #def stream_response(user_id, msg, document_id, current_content_selection, emit_event):
+            for response_data in self._dialog_manager.get_response_stream(user_id, msg['text'], document_id, self.current_content_selection):
+                # Emit intermediary responses
+                self.emit_event(WebSocketEvent("server_chat_answer_intermediary", response_data.get("intermediary", {})))
+
+            # Emit final response with suggested edits
             if session['access_rights'] in ["owner", "edit"]:
-                suggested_edits =  response_data["suggested_edits"]
+                suggested_edits = response_data.get("suggested_edits", [])
             else:
                 suggested_edits = []
-            
-            self.emit_event(WebSocketEvent("server_chat_answer", {
-                "response": response_data["response"],
+            self.emit_event(WebSocketEvent("server_chat_answer_final", {
+                "response": response_data.get("response", ""),
                 "suggested_edits": suggested_edits,
             }))
+            
+            # Start the response generation in a separate thread to avoid blocking
+            #threading.Thread(target=stream_response, args=(user_id, msg, document_id, self.current_content_selection, self.emit_event)).start()
 
         @self._socketio.on('client_apply_edit')
         @Auth.socket_auth_required(emit_event=self.emit_event)
