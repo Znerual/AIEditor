@@ -136,7 +136,58 @@ export const Editor = ({ documentId }) => {
 
     }, []);
 
-    const handleChatAnswer = useCallback((data) => {
+    const handleChatAnswerIntermediary = useCallback((data) => {
+        const { intermediary } = data;
+        log('CHAT', 'Received intermediary chat answer:', intermediary);
+        if (!intermediary || !intermediary.status) {
+            log('ERROR', 'No status found in intermediary chat answer');
+            return;
+        }
+
+        let message = '';
+
+        switch (intermediary.status) {
+            case 'generated action plan':
+                message = `Generated action plan: ${JSON.stringify(intermediary.action_plan)}`;
+                break;
+            case 'pre_running':
+                
+                message = `Pre-running action plan...`;
+                break;
+            case 'evaluating action plan':
+               
+                message = `Evaluating action plan...`;
+                break;
+            case 'fixing action_plan variable naming problems':
+                
+                message = `Fixing action plan variable naming problems: ${JSON.stringify(intermediary.variable_naming_problems)}`;
+                break;
+            case 'fixing action_plan variable position mistakes':
+                
+                message = `Fixing action plan variable position mistakes: ${JSON.stringify(intermediary.variable_position_mistakes)}`;
+                break;
+            case 'fixed action_plan variable naming problems':
+               
+                message = `Fixed action plan variable naming problems.`;
+                break;
+            case 'fixed action_plan find_text action problems':
+                
+                message = `Fixed action plan find text action problems.`;
+                break;    
+            case 'accepted':
+                message = `Suggestion accepted.`;
+                break;
+            default:
+                log('ERROR', `Unknown status: ${intermediary.status}`);
+                message = `Unknown status: ${intermediary.status}`;
+                break;
+        }
+
+        // Add a new message to the chat window for each intermediary status
+        setChatMessages(prev => [...prev, { text: message, sender: 'system' }]);
+    }, []);
+
+    const handleChatAnswerFinal = useCallback((data) => {
         const { response, suggested_edits } = data;
         log('CHAT', 'Received chat answer:', response, suggested_edits);
         setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
@@ -554,7 +605,8 @@ export const Editor = ({ documentId }) => {
         server_sent_new_structure: handleGetStructure,
         server_autocompletion_suggestions: handleAutocompletion,
         server_document_title_generated: handleDocumentTitleGenerated,
-        server_chat_answer: handleChatAnswer,
+        server_chat_answer_final: handleChatAnswerFinal,
+        server_chat_answer_intermediary: handleChatAnswerIntermediary,
         structure_parsed: handleStructureParsed,
     }), []); // Add any dependencies that might change the handlers, for example handleAutocompletion, handleChatAnswer, handleStructureParsed
 
