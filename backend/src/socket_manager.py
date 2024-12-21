@@ -416,7 +416,7 @@ class SocketManager:
                 suggested_edits = response_data.get("suggested_edits", [])
             else:
                 suggested_edits = []
-            logger.info(f"Final Response data: {response_data}, Suggested edits: {suggested_edits}")
+            logger.info(f"Final Response data: {response_data['response']}, Suggested edits: {suggested_edits}")
 
             self.emit_event(WebSocketEvent("server_chat_answer_final", {
                 "response": response_data.get("response", ""),
@@ -432,8 +432,10 @@ class SocketManager:
             document_id = session.get('document_id')
             edit_id = data.get("edit_id")
             accepted = data.get("accepted")
-            start_pos = data.get("start_pos")
-            end_pos = data.get("end_pos")
+            action_type = data.get("action_type")
+            text = data.get("text")
+            start = data.get("start")
+            end = data.get("end")
 
             if not accepted:
                 return
@@ -447,11 +449,13 @@ class SocketManager:
                 return
 
             try:
-                delta = self._dialog_manager.apply_edit(user_id, document_id, edit_id, start_pos, end_pos, accepted)
+                delta = self._dialog_manager.apply_edit(user_id, document_id, edit_id, start, end, accepted)
                 self.emit_event(WebSocketEvent("server_edit_applied", {
                     "edit_id": edit_id,
-                    "start_pos" : start_pos,
-                    "end_pos" : end_pos,
+                    "text" : text,
+                    "action_type" : action_type,
+                    "start" : start,
+                    "end" : end,
                     "delta_ops": delta.ops,
                 }))
             except Exception as e:
