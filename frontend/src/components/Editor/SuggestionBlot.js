@@ -11,6 +11,7 @@ class SuggestionBlot extends Inline {
         this.domNode.style.cursor = 'pointer';
         this.decisionButtons = null;
         this.description = null;
+        this.quillRef = value.quillRef;
         // if (value) {
         //     this.description = null;
         //     this.decisionButtons = null;
@@ -30,9 +31,10 @@ class SuggestionBlot extends Inline {
         console.log("Creating blot with ", data);
         node.setAttribute('class', 'suggestion'); // Add a class for styling
         node.setAttribute('id', data.id);
-        node.setAttribute('type', data.type); // 'insert', 'delete', 'replace'
+        node.setAttribute('action_type', data.action_type); // 'insert', 'delete', 'replace'
         node.setAttribute('text', data.text);
         node.setAttribute('position', data.position);
+        
         
         return node;
     }
@@ -73,7 +75,7 @@ class SuggestionBlot extends Inline {
     }
 
     static formats(node) {
-        return node.getAttribute('type');
+        return node.getAttribute('action_type');
         return true;
     }
     // static formats(node) {
@@ -107,7 +109,7 @@ class SuggestionBlot extends Inline {
         this.description.classList.add('suggestion-tooltip');
 
         // Get suggestion details
-        const suggestionType = this.domNode.getAttribute('type');
+        const suggestionType = this.domNode.getAttribute('action_type');
         const suggestionText = this.domNode.getAttribute('text');
         let suggestionDetail = '';
         
@@ -228,9 +230,12 @@ class SuggestionBlot extends Inline {
 
 
     acceptSuggestion() {
+        const index = this.offset(this.quillRef.current.getEditor().scroll);
+        console.log("Suggestion blot index stored: ", this.domNode.getAttribute('position'));
+        console.log("Calculated index: ", index);
         const detail = {
             'id' : this.domNode.getAttribute('id'),
-            'type' : this.domNode.getAttribute('type'),
+            'action_type' : this.domNode.getAttribute('action_type'),
             'text' : this.domNode.getAttribute('text'),
             'position' : this.domNode.getAttribute('position')
         }
@@ -242,9 +247,12 @@ class SuggestionBlot extends Inline {
     }
 
     rejectSuggestion() {
+        const index = this.offset(this.quillRef.current.getEditor().scroll);
+        console.log("Suggestion blot index stored: ", this.domNode.getAttribute('position'));
+        console.log("Calculated index: ", index);
         const detail = {
             'id' : this.domNode.getAttribute('id'),
-            'type' : this.domNode.getAttribute('type'),
+            'action_type' : this.domNode.getAttribute('action_type'),
             'text' : this.domNode.getAttribute('text'),
             'position' : this.domNode.getAttribute('position')
         }

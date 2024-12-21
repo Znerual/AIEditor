@@ -31,8 +31,8 @@ const DEBUG_FLAGS = {
     TITLE: false,
     STRUCTURE: false,
     CONTENT: false,
-    CHAT: false,
-    AUTOCOMPLETION: true,
+    CHAT: true,
+    AUTOCOMPLETION: false,
     GET_CONTENT: false,
     USER_EVENTS: false,
     SERVER_EVENTS: false,
@@ -137,22 +137,21 @@ export const Editor = ({ documentId }) => {
     }, []);
 
     const handleChatAnswerIntermediary = useCallback((data) => {
-        const  intermediary = data;
-        log('CHAT', 'Received intermediary chat answer:', intermediary);
-        if (!intermediary || !intermediary.status) {
+        log('CHAT', 'Received intermediary chat answer:', data);
+        if (!data || !data.status) {
             log('ERROR', 'No status found in intermediary chat answer');
             return;
         }
 
         let message = '';
 
-        switch (intermediary.status) {
+        switch (data.status) {
             case 'generated action plan':
-                message = `Generated action plan: ${JSON.stringify(intermediary.action_plan)}`;
+                message = `Generated action plan: ${JSON.stringify(data.action_plan)}`;
                 break;
-            case 'pre_running':
+            case 'Found text position, pre_running actions':
                 
-                message = `Pre-running action plan...`;
+                message = `Pre-running action plan, found the following variables ${JSON.stringify(data.positions)}`;
                 break;
             case 'evaluating action plan':
                
@@ -160,11 +159,11 @@ export const Editor = ({ documentId }) => {
                 break;
             case 'fixing action_plan variable naming problems':
                 
-                message = `Fixing action plan variable naming problems: ${JSON.stringify(intermediary.variable_naming_problems)}`;
+                message = `Fixing action plan variable naming problems: ${JSON.stringify(data.variable_naming_problems)}`;
                 break;
             case 'fixing action_plan variable position mistakes':
                 
-                message = `Fixing action plan variable position mistakes: ${JSON.stringify(intermediary.variable_position_mistakes)}`;
+                message = `Fixing action plan variable position mistakes: ${JSON.stringify(data.variable_position_mistakes)}`;
                 break;
             case 'fixed action_plan variable naming problems':
                
@@ -174,13 +173,22 @@ export const Editor = ({ documentId }) => {
                 
                 message = `Fixed action plan find text action problems.`;
                 break;    
+            case 'Failed to generate action plan, could not parse it':
+                message = 'Could not generate naming plan because of json problems';
+                break;
+            case "Fail to generate action_plan because of naming problems":
+                message = "Fail to generate action_plan because of naming problems";
+                break
+
+            case "Fixing match ambigouities":
+                message = `Fixing match ambigouities: ${JSON.stringify(data.problem)}, choice: ${data.selection}`
             case 'accepted':
                 message = `Suggestion accepted.`;
                 break;
             default:
-                log('ERROR', `Unknown status: ${intermediary.status}`);
-                console.error(`Unknown status: ${intermediary.status}`);
-                message = `Unknown status: ${intermediary.status}`;
+                log('ERROR', `Unknown status: ${data.status}`);
+                console.error(`Unknown status: ${data.status}`);
+                message = `Unknown status: ${data.status}`;
                 break;
         }
 
@@ -189,6 +197,7 @@ export const Editor = ({ documentId }) => {
     }, []);
 
     const handleChatAnswerFinal = useCallback((data) => {
+        log('CHAT', 'Received chat answer:', data);
         const { response, suggested_edits } = data;
         log('CHAT', 'Received chat answer:', response, suggested_edits);
         setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
@@ -204,9 +213,10 @@ export const Editor = ({ documentId }) => {
                 const position = Math.min(edit.arguments.position, currentLength);
                 const insertData = {
                 id: edit.name, // Or a unique ID from the backend
-                type: 'insert',
+                action_type: 'insert',
                 text: edit.arguments.text,
-                position: position
+                position: position,
+                quillRef: quillRef,
                 };
                 log('CHAT', 'Inserting suggestion with data:', insertData);
             
@@ -218,29 +228,33 @@ export const Editor = ({ documentId }) => {
                 const end = Math.min(edit.arguments.end, currentLength);
                 const deleteData = {
                 id: edit.name, // Unique ID for the suggestion
-                type: 'delete',
+                action_type: 'delete',
                 start: start,
-                end: end
+                end: end,
+                position: start,
+                quillRef: quillRef,
                 };
                 const suggestionTextROI = quill.getText(start, end - start);
-                quill.formatText(start, end - start, 'suggestion', deleteData);
-                //quill.deleteText(start, end - start, 'api');
-                //quill.insertText(start, suggestionTextROI, 'suggestion', deleteData);
+                //quill.formatText(start, end - start, 'suggestion', deleteData);
+                quill.deleteText(start, end - start, 'api');
+                quill.insertText(start, suggestionTextROI, 'suggestion', deleteData);
                 
             } else if (edit.name === 'replace_text') {
                 const start = Math.min(edit.arguments.start, currentLength);
                 const end = Math.min(edit.arguments.end, currentLength);
                 const replaceData = {
                 id: edit.name, // Unique ID for the suggestion
-                type: 'replace',
+                action_type: 'replace',
                 start: start,
                 end: end,
-                text: edit.arguments.new_text
+                position: start,
+                text: edit.arguments.new_text,
+                quillRef: quillRef,
                 };
                
                 const suggestionTextROI = quill.getText(start, end - start);
-                quill.formatText(start, end - start, 'suggestion', replaceData);
-                //quill.deleteText(start, end - start, 'api');
+                //quill.formatText(start, end - start, 'suggestion', replaceData);
+                quill.deleteText(start, end - start, 'api');
                 //quill.insertText(start, suggestionTextROI, 'suggestion', replaceData);
                
             }
@@ -708,16 +722,16 @@ export const Editor = ({ documentId }) => {
         }
         const quill = quillRef.current.getEditor();
 
-        if (data.type === 'insert') {
+        if (data.action_type === 'insert') {
             quill.deleteText(data.position, 1, 'silent');
             quill.insertText(data.position, data.text, 'silent');
-        } else if (data.type === 'delete') {
+        } else if (data.action_type === 'delete') {
             quill.deleteText(data.start, data.end - data.start, 'silent');
-        } else if (data.type === 'replace') {
+        } else if (data.action_type === 'replace') {
             quill.deleteText(data.start, data.end - data.start, 'silent');
             quill.insertText(data.start, data.text, 'silent');
         } else {
-            log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.type);
+            log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
 
         // Emit event to backend
