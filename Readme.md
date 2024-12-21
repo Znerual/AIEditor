@@ -205,6 +205,9 @@ npx shadcn-ui@0.8.0 add button card menubar collapsible input label dialog alert
 
 ### Backend
 
+> Important Note: 
+> In order to try the AI features, the debug flag in the `Config.py` file needs to be set to `True`. Otherwise, mockup models will generate the content used in debug mode.
+
 1. Activate the virtual environment.
 2. Run the backend using the `app.py` script:
 
