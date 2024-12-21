@@ -25,6 +25,14 @@ class ActionType(enum.Enum):
     REPLACE_TEXT = "replace_text"
     FIND_TEXT = "find_text"
 
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, str):
+            return value == self.value
+        return super().__eq__(value)
+    
+    def __str__(self) -> str:
+        return self.value
+
 @dataclass
 class FunctionCall:
     """Represents a function call with its arguments and status"""
@@ -33,13 +41,13 @@ class FunctionCall:
     status: Optional[str] = None
 
     def __post_init__(self):
-        self.id = uuid.uuid4()
+        self.id = str(uuid.uuid4())
 
     def to_dict(self):
         """Converts the FunctionCall to a dictionary."""
         return {
             "id": self.id,
-            "name": self.action_type,
+            "name": str(self.action_type),
             "arguments": self.arguments,
             "status": self.status
         }
@@ -61,6 +69,14 @@ class FunctionCall:
 class Decision(enum.Enum):
     APPLY = "apply"
     REJECT = "reject"
+
+    def __str__(self) -> str:
+        return self.value
+    
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, str):
+            return value == self.value
+        return super().__eq__(value)
 
 class Action(typing.TypedDict):
     action_type: ActionType
@@ -95,15 +111,15 @@ class DebugModel:
             # Simulate a more elaborate action plan with some intentional errors
             if "User:" in prompt and "important information" in prompt and "outdated policy" in prompt:
                 return DebugResponse(text=json.dumps([
-                    {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "important information", "find_action_start_variable_name": "info_start", "find_action_end_variable_name": "", "action_explanation": "Find the important information in the document."},
+                    {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "important information", "find_action_start_variable_name": "info_start", "find_action_end_variable_name": "info_end", "action_explanation": "Find the important information in the document."},
                     {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "outdated policy", "find_action_start_variable_name": "outdated_start", "find_action_end_variable_name": "outdated_end", "action_explanation": "Locate the section with outdated policy."},
                     {"action_type": "delete_text", "action_input_start_variable_name": "outdated_start", "action_input_end_variable_name": "outdated_end", "action_text_input": "", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Remove the outdated policy section."},
                     {"action_type": "insert_text", "action_input_start_variable_name": "info_end", "action_input_end_variable_name": "", "action_text_input": " New updated information.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Add new information after the important information section."}
                 ]))
             else:  
                 return DebugResponse(text=json.dumps([
-                    {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "important data", "find_action_start_variable_name": "data_start", "find_action_end_variable_name": "data_end", "action_explanation": "Find the beginning and end of the section 'important data'"},
-                    {"action_type": "replace_text", "action_input_start_variable_name": "data_start", "action_input_end_variable_name": "wrong_end", "action_text_input": "Corrected important data.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Replace the text between 'data_start' and 'wrong_end'"},
+                    {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "debug", "find_action_start_variable_name": "data_start", "find_action_end_variable_name": "data_end", "action_explanation": "Find the beginning and end of the section 'important data'"},
+                    {"action_type": "replace_text", "action_input_start_variable_name": "data_start", "action_input_end_variable_name": "data_end", "action_text_input": "Corrected important data.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Replace the text between 'data_start' and 'data_end'"},
                     {"action_type": "insert_text", "action_input_start_variable_name": "data_end", "action_input_end_variable_name": "", "action_text_input": " Additional context.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Add additional context after 'data_end'."}
                 ]))
         elif self.model_type == 'fix_planning':
@@ -121,23 +137,23 @@ class DebugModel:
                 return DebugResponse(text="0")  # Return index 0
         elif self.model_type == 'evaluation':
             # Simulate a more nuanced evaluation with specific action suggestions
-            if "reject" in prompt.lower():
-                return DebugResponse(
-                    text=json.dumps({"decision": "reject", "explanation": "The plan includes a deletion of potentially important information without a clear justification. The insertion point for new text is also not well defined."}),
-                    function_calls=[
-                        {"action_type": "delete_text", "arguments": {"start": 10, "end": 50}, "status": "suggested"},
-                        {"action_type": "insert_text", "arguments": {"text": "New updated information.", "position": 50}, "status": "suggested"}
-                    ]
-                )
-            else:
-                return DebugResponse(
-                    text=json.dumps({"decision": "apply", "explanation": "The plan seems reasonable. The find actions correctly identify the relevant sections, and the replacement and insertion actions are appropriate."}),
-                    function_calls=[
-                         {"action_type": "find_text", "arguments": {"search_text": "important data"}, "status": "executed"},
-                        {"action_type": "replace_text", "arguments": {"start": 10, "end": 40, "new_text": "Corrected important data."}, "status": "suggested"},
-                        {"action_type": "insert_text", "arguments": {"text": " Additional context.", "position": 40}, "status": "suggested"}
-                    ]
-                )
+            # if "reject" in prompt.lower():
+            #     return DebugResponse(
+            #         text=json.dumps({"decision": "reject", "explanation": "The plan includes a deletion of potentially important information without a clear justification. The insertion point for new text is also not well defined."}),
+            #         function_calls=[
+            #             {"action_type": "delete_text", "arguments": {"start": 10, "end": 50}, "status": "suggested"},
+            #             {"action_type": "insert_text", "arguments": {"text": "New updated information.", "position": 50}, "status": "suggested"}
+            #         ]
+            #     )
+            # else:
+            return DebugResponse(
+                text=json.dumps({"decision": "apply", "explanation": "The plan seems reasonable. The find actions correctly identify the relevant sections, and the replacement and insertion actions are appropriate."}),
+                function_calls=[
+                        {"action_type": "find_text", "arguments": {"search_text": "important data"}, "status": "executed"},
+                    {"action_type": "replace_text", "arguments": {"start": 10, "end": 40, "new_text": "Corrected important data."}, "status": "suggested"},
+                    {"action_type": "insert_text", "arguments": {"text": " Additional context.", "position": 40}, "status": "suggested"}
+                ]
+            )
         else:
             return DebugResponse(text="Debug response from unknown model type.")
 
@@ -299,6 +315,7 @@ class DialogManager:
         except json.JSONDecodeError:
             logging.error(f"Failed to parse action plan as JSON: {action_plan_response.text}")
             action_plan = []  # or some other default/fallback action plan
+            return {"response": {"status": "Failed to generate action plan, could not parse it", "action_plan": action_plan_str}}
 
         logging.info(f"Generated action plan: {action_plan}")
         yield {"intermediary": {"status" : "generated action plan", "action_plan": action_plan}}
@@ -306,7 +323,7 @@ class DialogManager:
         # --- Step 2: Pre-run the action plan to determine positions and gather necessary data ---
         variable_naming_problems = self._validate_action_plan_variables(action_plan)
         if variable_naming_problems:
-            logging.error(f"Failed to generate action plan due to variable naming problems: {variable_naming_problems}")
+            logging.error(f"Problems found in generated action plan due to variable naming problems: {variable_naming_problems}")
             yield {"intermediary": {"status" : "fixing action_plan variable naming problems", "action_plan": action_plan, "variable_naming_problems": variable_naming_problems}}
 
             fix_counter = 0
@@ -320,6 +337,9 @@ class DialogManager:
                     logging.info(f"Fixed variable naming problems: {variable_naming_problems}")
                     yield {"intermediary": {"status" : "fixed action_plan variable naming problems", "action_plan": action_plan}}
                     break
+            if variable_naming_problems:
+                logging.info(f"Could not fix varible naming problems after {fix_counter} iteractions")
+                return {"response" : {"status" : "Fail to generate action_plan because of naming problems", "problems" : variable_naming_problems}}
 
         variable_positions, variable_position_mistakes, variable_position_problems = self._validate_find_text_actions(document_text, action_plan)
         if variable_position_mistakes:
@@ -337,6 +357,9 @@ class DialogManager:
                     logging.info(f"Fixed find_text action mistakes: {variable_position_mistakes}")
                     yield {"intermediary": {"status" : "fixed action_plan find_text action problems", "action_plan": action_plan}}
                     
+            if variable_position_mistakes:
+                logging.info(f"Failed to generate action plan due to find_text action problems: {variable_position_mistakes}")
+                yield {"response" : {"status" : "Failed to generate action plan due to find_text action mistakes", "problems" : variable_position_mistakes}}
         if variable_position_problems:
             logging.info(f"Failed to generate action plan due to find_text action problems: {variable_position_problems}\n Query the model for resolution.")
             for start_variable, end_variable, problem in variable_position_problems:
@@ -370,17 +393,19 @@ class DialogManager:
                     selection_index = int(selection_str) # type: ignore
                 except ValueError as e:
                     logging.error(f"Failed to parse fix for non-exclusive matches in action plan from model response: {e}")
-                    return {"response" : "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    yield {"response" : "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    return
                 if selection_index == -1:
                     logging.info(f"Model response for fixing non-exclusive matches in action plan: No match found.")
-                    return {"response" : "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
-                
+                    yield {"response" : "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    return
+                yield {"intermediary" : {"status" : "Fixing match ambigouities", "problem" : problem, "selection" : selection_index}}
             # update the fixed variable positions
             variable_positions[start_variable] = variable_positions[start_variable][selection_index] # type: ignore
             variable_positions[end_variable] = variable_positions[end_variable][selection_index] # type: ignore
 
-
-        yield {"intermediary": {"status": "pre_running"}}
+        logging.info(f"Extracted for following variables and their positions in the text: {variable_positions}")
+        yield {"intermediary": {"status": "Found text position, pre_running actions", "positions" : variable_positions}}
 
         actions = self._pre_run_actions(variable_positions, action_plan)  # type: ignore
         logging.info(f"Pre-run results: {actions}")
@@ -402,7 +427,7 @@ class DialogManager:
             logging.info(f"Evaluation rejected the action plan.")
             return {"response" : f"Failed to apply the generated actions due to the evaluation report: {evaluation['explanation']}.", "suggested_edits": []}
             
-        logging.info(f"Generated function calls: {actions}")
+        logging.info(f"Accepted change, generated function calls: {actions}")
 
         # Update dialog history
         history.append(DialogTurn(
@@ -411,11 +436,11 @@ class DialogManager:
             actions,
         ))
         self.dialog_history[user_id] = history
-
-        return {
+        yield {
             "response": evaluation['explanation'],
-            "suggested_edits": [fc.to_dict() for fc in actions],
+            "suggested_edits": [action.to_dict() for action in actions],
         }
+        return 
 
     def _build_action_plan_prompt(self, user_message: str, history: List[DialogTurn], document_text: str, relevant_content: List[Tuple[str, str]]) -> str: 
         """
@@ -461,21 +486,21 @@ class DialogManager:
         input_variables = set()
         for action in action_plan:
 
-            if action['find_action_start_variable_name'] in output_variables:
-                problems.append(f"Error: Duplicate start position variable name '{action['find_action_start_variable_name']}' for action {action['action_explanation']} used.")
-            output_variables.add(action['find_action_start_variable_name'])
+            if len(action['find_action_start_variable_name']) > 0:
+                if action['find_action_start_variable_name'] in output_variables:
+                    problems.append(f"Error: Duplicate start position variable name '{action['find_action_start_variable_name']}' for action {action['action_explanation']} used.")
+                output_variables.add(action['find_action_start_variable_name'])
 
-            if action['find_action_end_variable_name'] in output_variables:
-                problems.append(f"Error: Duplicate end position variable name '{action['find_action_end_variable_name']}' for action {action['action_explanation']} used.")
-            output_variables.add(action['find_action_end_variable_name'])
+            if len(action['find_action_end_variable_name']) > 0:
+                if action['find_action_end_variable_name'] in output_variables:
+                    problems.append(f"Error: Duplicate end position variable name '{action['find_action_end_variable_name']}' for action {action['action_explanation']} used.")
+                output_variables.add(action['find_action_end_variable_name'])
             
-            if action['action_input_start_variable_name'] in input_variables:
-                problems.append(f"Error: Duplicate input start position variable name '{action['action_input_start_variable_name']}' for action {action['action_explanation']} used.")
-            input_variables.add(action['action_input_start_variable_name'])
+            if len(action['action_input_start_variable_name']) > 0:
+                input_variables.add(action['action_input_start_variable_name'])
 
-            if action['action_input_end_variable_name'] in input_variables:
-                problems.append(f"Error: Duplicate input end position variable name '{action['action_input_end_variable_name']}' for action {action['action_explanation']} used.")
-            input_variables.add(action['action_input_end_variable_name'])
+            if len(action['action_input_end_variable_name']) > 0: 
+                input_variables.add(action['action_input_end_variable_name'])
 
         missing_inputs = input_variables - output_variables
         unused_outputs = output_variables - input_variables
@@ -652,7 +677,7 @@ class DialogManager:
         for i, action in enumerate(action_plan):
             if action['action_type'] == ActionType.FIND_TEXT:
                 search_text = action['action_text_input']
-
+                logging.info(f"Running search text action for search text: {search_text}")
                 # Initialize empty lists for start and end positions for this action
                 positions[action['find_action_start_variable_name']] = []
                 positions[action['find_action_end_variable_name']] = []
@@ -698,6 +723,8 @@ class DialogManager:
                         positions[action['find_action_start_variable_name']].append(start_pos)
                         positions[action['find_action_end_variable_name']].append(end_pos)
 
+                    logging.info(f"Found exact matches: {exact_matches}")
+
                 if not positions[action['find_action_start_variable_name']]:
                     mistakes.append(f"Action {i+1}: Failed to find text '{search_text}' in document for action {action['action_explanation']}")
 
@@ -706,6 +733,7 @@ class DialogManager:
                 
                 if len(positions[action['find_action_start_variable_name']]) > 1:
                     problems.append((action['find_action_start_variable_name'], action['find_action_end_variable_name'], f"Action {i+1}: Multiple matches found for '{search_text}' in document for action {action['action_explanation']}"))
+                    logging.info("Too many occurences of the text ", search_text, " found")
                     continue
 
                 positions[action['find_action_start_variable_name']] = positions[action['find_action_start_variable_name']][0]
@@ -797,7 +825,7 @@ class DialogManager:
         prompt = "## Dialog History:\n"
         for turn in history:
             prompt += f"User: {turn.user_message}\n"
-            past_actions = '\n'.join([str(past_action) for past_action in turn.function_calls]) # type: ignore
+            past_actions = '\n -'.join([str(past_action) for past_action in turn.function_calls]) # type: ignore
             prompt += f"Agent (Actions):\n{past_actions}\n"
 
         prompt += "\n## User Message:\n"
@@ -807,7 +835,8 @@ class DialogManager:
         prompt += "\n## Document:\n"
         prompt += document_text + "\n"
         prompt += "\n## Actions:\n"
-        prompt += json.dumps(actions)
+        current_actions = '\n -'.join([str(action) for action in actions]) # type: ignore
+        prompt += current_actions
         prompt += "\n## Task:\nEvaluate the planed actions, do they fullfill the users request? Provide a brief summary of your evaluation and decide whether to proceed with the actions or reject the actions.\n" 
         prompt += "## Summary:\n"
         return prompt
