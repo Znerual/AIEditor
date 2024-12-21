@@ -13,12 +13,14 @@ from functools import partial
 from models import User, Document, DocumentEditAccess,DocumentReadAccess
 from concurrent.futures import ThreadPoolExecutor
 from models import Document, db
-
+import logging
 from delta import Delta
 import uuid
 from utils import string_to_delta
 import threading
 from config import Config
+
+logger = logging.getLogger('eddy_logger')
 
 class SocketManager:
     _instance: Optional['SocketManager'] = None
@@ -186,7 +188,7 @@ class SocketManager:
                 
                 #print("Text change data: " ,data)
                 # User ID comes from the token, not the request
-                updated_content = DocumentManager.apply_delta(document_id, user_id, delta)
+                updated_content = DocumentManager.apply_delta(document_id, delta)
                 #print("Updated content: ", updated_content)
                 # Broadcast the delta to all other clients in the same document room (except the sender)
                 self.emit_event(WebSocketEvent('server_text_change', {
@@ -219,7 +221,7 @@ class SocketManager:
                     raise ValueError("Document not found")
                 
                 #print("Document", document)
-                content_str = DocumentManager.get_document_content(document, user_id, as_string=True)
+                content_str = DocumentManager.get_document_content(document, as_string=True)
                 #print("Content str", content_str)
                  # Get and emit autocompletion suggestions
                 suggestions = self._autocomplete_manager.get_suggestions(
@@ -414,6 +416,8 @@ class SocketManager:
                 suggested_edits = response_data.get("suggested_edits", [])
             else:
                 suggested_edits = []
+            logger.info(f"Final Response data: {response_data}, Suggested edits: {suggested_edits}")
+
             self.emit_event(WebSocketEvent("server_chat_answer_final", {
                 "response": response_data.get("response", ""),
                 "suggested_edits": suggested_edits,
@@ -428,6 +432,8 @@ class SocketManager:
             document_id = session.get('document_id')
             edit_id = data.get("edit_id")
             accepted = data.get("accepted")
+            start_pos = data.get("start_pos")
+            end_pos = data.get("end_pos")
 
             if not accepted:
                 return
@@ -441,11 +447,12 @@ class SocketManager:
                 return
 
             try:
-                response, deltas = self._dialog_manager.apply_edit(user_id, document_id, edit_id, accepted)
+                delta = self._dialog_manager.apply_edit(user_id, document_id, edit_id, start_pos, end_pos, accepted)
                 self.emit_event(WebSocketEvent("server_edit_applied", {
-                    "edit_id": edit_id, 
-                    "response": response,
-                    "deltas_ops": deltas,
+                    "edit_id": edit_id,
+                    "start_pos" : start_pos,
+                    "end_pos" : end_pos,
+                    "delta_ops": delta.ops,
                 }))
             except Exception as e:
                 self.emit_event(WebSocketEvent("server_error", {"message": str(e)}))
