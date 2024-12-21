@@ -16,3 +16,4 @@ pdfminer
 setuptools
 Pillow
 beautifulsoup4
+fuzzywuzzy
