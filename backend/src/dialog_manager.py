@@ -65,6 +65,9 @@ class FunctionCall:
             return f"{self.status} find_text({self._get_param_str()})"
         else:
             return f"Unknown action type: {self.action_type}"
+        
+    def __repr__(self) -> str:
+        return self.__str__()
 
 class Decision(enum.Enum):
     APPLY = "apply"
@@ -384,7 +387,7 @@ class DialogManager:
                 prompt += "## Selection (int):\n"
 
                 # Query the model
-                response = self.fix_planning_model.generate_content(prompt)
+                response = self.select_find_text_match_model.generate_content(prompt)
                 selection_str = response.text
             
                 logging.info(f"Model response for fixing non-exlusive matches in action plan: {selection_str}")
@@ -404,11 +407,11 @@ class DialogManager:
             variable_positions[start_variable] = variable_positions[start_variable][selection_index] # type: ignore
             variable_positions[end_variable] = variable_positions[end_variable][selection_index] # type: ignore
 
-        logging.info(f"Extracted for following variables and their positions in the text: {variable_positions}")
+        logging.debug(f"Extracted for following variables and their positions in the text: {variable_positions}")
         yield {"intermediary": {"status": "Found text position, pre_running actions", "positions" : variable_positions}}
 
         actions = self._pre_run_actions(variable_positions, action_plan)  # type: ignore
-        logging.info(f"Pre-run results: {actions}")
+        logging.debug(f"Pre-run results: {actions}")
 
         # --- Step 3: Evaluate the Action Plan ---
         evaluation_prompt = self._build_evaluation_prompt(user_message, history, document_text, actions)
@@ -427,7 +430,7 @@ class DialogManager:
             logging.info(f"Evaluation rejected the action plan.")
             return {"response" : f"Failed to apply the generated actions due to the evaluation report: {evaluation['explanation']}.", "suggested_edits": []}
             
-        logging.info(f"Accepted change, generated function calls: {actions}")
+        logging.info(f"Accepted change, generated function calls")
 
         # Update dialog history
         history.append(DialogTurn(
@@ -868,18 +871,18 @@ class DialogManager:
         # Access the function call using the found indices
         function_call = history[turn_index].function_calls[function_call_index] # type: ignore
         if function_call.status != "suggested":
-            logger.error(f"Function call {function_call.name}[{function_call.id}] is not suggested, but already {function_call.status}")
-            raise ValueError(f"Function call {function_call.name}[{function_call.id}] is not suggested, but already {function_call.status}")
+            logger.error(f"Function call [{function_call.id}] is not suggested, but already {function_call.status}")
+            raise ValueError(f"Function call [{function_call.id}] is not suggested, but already {function_call.status}")
 
         delta = Delta()
         if accepted:
             # Apply the function call
             delta = self._execute_function_calls(current_start, current_end, document_id, function_call)  # type: ignore # Pass a list with a single function call
             function_call.status = "accepted"
-            logging.info(f"Function call {function_call.name}[{function_call.id}] executed: {delta}")
+            logging.info(f"Function call [{function_call.id}] executed: {delta}")
         else:
             function_call.status = "rejected"
-            logging.info(f"Function call {function_call.name}[{function_call.id}] rejected.")
+            logging.info(f"Function call [{function_call.id}] rejected.")
 
         logging.debug(f"Updated dialog history: {history}")
 
