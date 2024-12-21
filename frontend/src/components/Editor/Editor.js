@@ -37,7 +37,7 @@ const DEBUG_FLAGS = {
     USER_EVENTS: false,
     SERVER_EVENTS: false,
     EDITOR_CHANGE: false,
-    SUGGESTION_LOGIC: false,
+    SUGGESTION_LOGIC: true,
 };
 
 const log = (flag, message, ...args) => {
@@ -209,53 +209,42 @@ export const Editor = ({ documentId }) => {
         if (suggested_edits && suggested_edits.length > 0) {
             suggested_edits.forEach(edit => {
             log('CHAT', 'Processing edit:', edit);
+            log('CHAT', 'Edit id:', edit.id);
             if (edit.name === 'insert_text') {
                 const position = Math.min(edit.arguments.position, currentLength);
                 const insertData = {
-                id: edit.name, // Or a unique ID from the backend
+                action_id: edit.id, // Or a unique ID from the backend
                 action_type: 'insert',
                 text: edit.arguments.text,
-                position: position,
-                quillRef: quillRef,
                 };
+
                 log('CHAT', 'Inserting suggestion with data:', insertData);
-            
-                // Insert a placeholder for the suggestion
-                quill.insertText(insertData.position, "*", 'suggestion', insertData);
+                const new_delta = new Delta().retain(position).insert("*", {"suggestion" : insertData});
+                quillRef.current.getEditor().updateContents(new_delta, 'api');
+
                
             } else if (edit.name === 'delete_text') {
                 const start = Math.min(edit.arguments.start, currentLength);
                 const end = Math.min(edit.arguments.end, currentLength);
                 const deleteData = {
-                id: edit.name, // Unique ID for the suggestion
+                action_id: edit.id, // Unique ID for the suggestion
                 action_type: 'delete',
-                start: start,
-                end: end,
-                position: start,
-                quillRef: quillRef,
                 };
-                const suggestionTextROI = quill.getText(start, end - start);
-                //quill.formatText(start, end - start, 'suggestion', deleteData);
-                quill.deleteText(start, end - start, 'api');
-                quill.insertText(start, suggestionTextROI, 'suggestion', deleteData);
+                //const suggestionTextROI = quill.getText(start, end - start);
+                const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : deleteData});
+                quill.updateContents(new_delta, 'api');
                 
             } else if (edit.name === 'replace_text') {
                 const start = Math.min(edit.arguments.start, currentLength);
                 const end = Math.min(edit.arguments.end, currentLength);
                 const replaceData = {
-                id: edit.name, // Unique ID for the suggestion
+                action_id: edit.id, // Unique ID for the suggestion
                 action_type: 'replace',
-                start: start,
-                end: end,
-                position: start,
                 text: edit.arguments.new_text,
-                quillRef: quillRef,
                 };
                
-                const suggestionTextROI = quill.getText(start, end - start);
-                //quill.formatText(start, end - start, 'suggestion', replaceData);
-                quill.deleteText(start, end - start, 'api');
-                //quill.insertText(start, suggestionTextROI, 'suggestion', replaceData);
+                const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : replaceData});
+                quill.updateContents(new_delta, 'api');
                
             }
             });
@@ -305,8 +294,9 @@ export const Editor = ({ documentId }) => {
         setUserTypedText('');  // Reset typed text when new suggestion appears
 
         // Show the first suggestion
-        
-        quillEditor.insertText(insertIndex, suggestionText, 'completion', 'silent'); // Insert with custom formats
+        const new_delta = new Delta().retain(insertIndex).insert(suggestionText, {'completion' : true});
+        quillEditor.updateContents(new_delta, 'silent');
+        // quillEditor.insertText(insertIndex, suggestionText, 'completion', 'silent'); // Insert with custom formats
         quillEditor.setSelection(insertIndex + suggestionText.length, 0, 'silent');
     
         setAutocompletionSuggestions(event.suggestions);
@@ -371,19 +361,17 @@ export const Editor = ({ documentId }) => {
             case 'ArrowUp': {
                 event.preventDefault();
                 
-                // Remove previous suggestion
-                if (cursorPositionBeforeSuggestion) {
-                    quillEditor.deleteText(cursorPositionBeforeSuggestion, autocomplationSuggestions[autocompletionSuggestionIndex].length);
-                }
-
+                const oldLength = autocomplationSuggestions[autocompletionSuggestionIndex].length;
                 const newIndex = event.key === 'ArrowDown'
                     ? (autocompletionSuggestionIndex + 1) % autocomplationSuggestions.length
                     : (autocompletionSuggestionIndex - 1 + autocomplationSuggestions.length) % autocomplationSuggestions.length;
-                
-                // Insert new suggestion
-                const newSuggestion = autocomplationSuggestions[newIndex];
-                quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, 'completion', 'silent');
-                quillEditor.setSelection(cursorPositionBeforeSuggestion + newSuggestion.length, 0, 'silent');
+                const newText = autocomplationSuggestions[newIndex];
+            
+
+                const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).delete(oldLength).insert(newText, {'completion' : true});
+                quillEditor.updateContents(new_delta, 'silent');
+                // quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, 'completion', 'silent');
+                quillEditor.setSelection(cursorPositionBeforeSuggestion + newText.length, 0, 'silent');
 
                 setAutocompletionSuggestionIndex(newIndex);
                 setUserTypedText('');
@@ -396,21 +384,18 @@ export const Editor = ({ documentId }) => {
                 
                 // Accept the current suggestion
                 const suggestionText = autocomplationSuggestions[autocompletionSuggestionIndex];
-                // Remove the temporary formatting
-                const textAtPosition = quillEditor.getText(cursorPositionBeforeSuggestion, suggestionText.length);
-                log('SUGGESTION_LOGIC', "Debug - Suggestion text:", JSON.stringify(suggestionText));
-                log('SUGGESTION_LOGIC', "Debug - Text at position:", JSON.stringify(textAtPosition));
-
-                log('SUGGESTION_LOGIC', "Deleting text at position ", cursorPositionBeforeSuggestion, " with length ", suggestionText.length);
-                quillEditor.deleteText(cursorPositionBeforeSuggestion, suggestionText.length + 1, 'silent');
-                log('SUGGESTION_LOGIC', "Deleted text at position ", cursorPositionBeforeSuggestion, " with length ", suggestionText.length);
+                
+                const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).retain(suggestionText.length, {'completion' : null}).delete(1); 
+                quillEditor.updateContents(new_delta, 'silent');
+                //uillEditor.deleteText(cursorPositionBeforeSuggestion, suggestionText.length + 1, 'silent');
+               
                 // Insert the final text with normal formatting
-                quillEditor.insertText(cursorPositionBeforeSuggestion, suggestionText, 'silent');
+                //quillEditor.insertText(cursorPositionBeforeSuggestion, suggestionText, 'silent');
                 //quillEditor.removeFormat(cursorPositionBeforeSuggestion, suggestionText.length, 'silent');
-                log('SUGGESTION_LOGIC', "Inserted text at position ", cursorPositionBeforeSuggestion, " with text ", suggestionText);
+               
                 // Move cursor to end of inserted text
                 quillEditor.setSelection(cursorPositionBeforeSuggestion + suggestionText.length, 0, 'silent');
-                log('SUGGESTION_LOGIC', "Cursor position set to ", cursorPositionBeforeSuggestion + suggestionText.length);
+                
                 
                 // Delete the created tab/enter character when accepting the suggestion
                 //quillEditor.deleteText(cursorPositionBeforeSuggestion + suggestionText.length, 1, 'silent');
@@ -481,36 +466,40 @@ export const Editor = ({ documentId }) => {
                     }
 
                     // Update the display with partially accepted suggestion
-                    if (cursorPositionBeforeSuggestion) {
-                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
-                        //quillEditor.removeFormat(cursorPositionBeforeSuggestion, newTypedText.length, 'silent');
-                    }
-                    
+                    // if (cursorPositionBeforeSuggestion) {
+                    //     quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
+                    //     //quillEditor.removeFormat(cursorPositionBeforeSuggestion, newTypedText.length, 'silent');
+                    // }
+                    const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).retain(newTypedText.length, {'completion' : null});
+                    quillEditor.updateContents(new_delta, 'silent');
                     // Insert accepted part in black
-                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
+                    // quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
 
-                    // Insert remaining suggestion in gray
-                    const remainingSuggestion = currentSuggestion.slice(newTypedText.length);
-                    quillEditor.insertText(
-                        cursorPositionBeforeSuggestion + newTypedText.length,
-                        remainingSuggestion,
-                        'completion',
-                        'silent'
-                    );
+                    // // Insert remaining suggestion in gray
+                    // const remainingSuggestion = currentSuggestion.slice(newTypedText.length);
+                    // quillEditor.insertText(
+                    //     cursorPositionBeforeSuggestion + newTypedText.length,
+                    //     remainingSuggestion,
+                    //     'completion',
+                    //     'silent'
+                    // );
                     
                     quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                      
     
                 } else {
                     // If there's a mismatch, remove the suggestion
-                    if (cursorPositionBeforeSuggestion) {
-                        quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
-                    }
+                    // if (cursorPositionBeforeSuggestion) {
+                    //     quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
+                    // }
                     
-                    // Insert the typed text
-                    quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
-                    quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
+                    // // Insert the typed text
+                    // quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
+                    // quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                     
+                    const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).delete(currentSuggestion.length).insert(newTypedText);
+                    quillEditor.updateContents(new_delta, 'silent');
+
                     const delta = new Delta();
                     delta.retain(cursorPositionBeforeSuggestion);
                     delta.insert(newTypedText);
@@ -715,6 +704,7 @@ export const Editor = ({ documentId }) => {
 
     // Custom Event Handlers (in MainApp)
     const handleAcceptSuggestion = useCallback((event) => {
+        log('SUGGESTION_LOGIC', "Accept suggestion event triggered", event);
         const data = event.detail;
         if (!data) {
             log('SUGGESTION_LOGIC', 'Accept suggestion event data is missing');
@@ -723,13 +713,19 @@ export const Editor = ({ documentId }) => {
         const quill = quillRef.current.getEditor();
 
         if (data.action_type === 'insert') {
-            quill.deleteText(data.position, 1, 'silent');
-            quill.insertText(data.position, data.text, 'silent');
+            const new_delta = new Delta().retain(data.start).delete(1).insert(data.text);
+            quill.updateContents(new_delta, 'silent');
+            // quill.deleteText(data.start, 1, 'silent');
+            // quill.insertText(data.start, data.text, 'silent');
         } else if (data.action_type === 'delete') {
-            quill.deleteText(data.start, data.end - data.start, 'silent');
+            const new_delta = new Delta().retain(data.start).delete(data.end-data.start);
+            quill.updateContents(new_delta, 'silent');
+            //quill.deleteText(data.start, data.end - data.start, 'silent');
         } else if (data.action_type === 'replace') {
-            quill.deleteText(data.start, data.end - data.start, 'silent');
-            quill.insertText(data.start, data.text, 'silent');
+            const new_delta = new Delta().retain(data.start).delete(data.end-data.start).insert(data.text);
+            quill.updateContents(new_delta, 'silent');
+            // quill.deleteText(data.start, data.end - data.start, 'silent');
+            // quill.insertText(data.start, data.text, 'silent');
         } else {
             log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
@@ -737,8 +733,12 @@ export const Editor = ({ documentId }) => {
         // Emit event to backend
         emit('client_apply_edit', {
             documentId,
-            edit_id: data.id,
+            edit_id: data.action_id,
             accepted: true,
+            action_type: data.action_type,
+            text: data.text,
+            start: data.start,
+            end: data.end,
         });
     }, [documentId, emit]);
 
@@ -752,24 +752,34 @@ export const Editor = ({ documentId }) => {
 
         log('SUGGESTION_LOGIC', "Rejecting suggestion ", data.id);
         log('SUGGESTION_LOGIC', "With data ", event);
-        if (data.type === 'insert') {
-            quill.deleteText(data.position, 1, 'silent');
-        } else if (data.type === 'delete') {
-            const suggestionTextROI = quill.getText(data.start, data.end - data.start);
-            quill.deleteText(data.start, data.end - data.start, 'silent');
-            quill.insertText(data.start, suggestionTextROI, 'silent');
-        } else if (data.type === 'replace') {
-            const suggestionTextROI = quill.getText(data.start, data.end - data.start);
-            quill.deleteText(data.start, data.end - data.start, 'silent');
-            quill.insertText(data.start, data.text, suggestionTextROI, 'silent');
+        if (data.action_type === 'insert') {
+            const new_delta = new Delta().retain(data.start).delete(1);
+            quill.updateContents(new_delta, 'silent');
+            // quill.deleteText(data.start, 1, 'silent');
+        } else if (data.action_type === 'delete') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'suggestion' : null});
+            quill.updateContents(new_delta, 'silent');
+            // const suggestionTextROI = quill.getText(data.start, data.end - data.start);
+            // quill.deleteText(data.start, data.end - data.start, 'silent');
+            // quill.insertText(data.start, suggestionTextROI, 'silent');
+        } else if (data.action_type === 'replace') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'suggestion' : null});
+            quill.updateContents(new_delta, 'silent');
+            // const suggestionTextROI = quill.getText(data.start, data.end - data.start);
+            // quill.deleteText(data.start, data.end - data.start, 'silent');
+            // quill.insertText(data.start, data.text, suggestionTextROI, 'silent');
         } else {
-            log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.type);
+            log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
         
         emit('client_apply_edit', {
             documentId,
             edit_id: data.id,
             accepted: false,
+            action_type: data.action_type,
+            text: data.text,
+            start: data.start,
+            end: data.end,
         });
     }, [documentId, emit]);
 

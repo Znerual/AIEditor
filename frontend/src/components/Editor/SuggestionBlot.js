@@ -11,7 +11,11 @@ class SuggestionBlot extends Inline {
         this.domNode.style.cursor = 'pointer';
         this.decisionButtons = null;
         this.description = null;
-        this.quillRef = value.quillRef;
+        this.action_type = value.action_type;
+        this.text = value.text;
+        this.action_id = value.action_id;
+       
+        console.log('[SuggestionBlot] Constructed DOM node ', domNode);
         // if (value) {
         //     this.description = null;
         //     this.decisionButtons = null;
@@ -30,12 +34,7 @@ class SuggestionBlot extends Inline {
 
         console.log("Creating blot with ", data);
         node.setAttribute('class', 'suggestion'); // Add a class for styling
-        node.setAttribute('id', data.id);
-        node.setAttribute('action_type', data.action_type); // 'insert', 'delete', 'replace'
-        node.setAttribute('text', data.text);
-        node.setAttribute('position', data.position);
-        
-        
+        console.log('[SuggestionBlot] Setting attributes on DOM node ', node);
         return node;
     }
 
@@ -75,7 +74,6 @@ class SuggestionBlot extends Inline {
     }
 
     static formats(node) {
-        return node.getAttribute('action_type');
         return true;
     }
     // static formats(node) {
@@ -109,8 +107,8 @@ class SuggestionBlot extends Inline {
         this.description.classList.add('suggestion-tooltip');
 
         // Get suggestion details
-        const suggestionType = this.domNode.getAttribute('action_type');
-        const suggestionText = this.domNode.getAttribute('text');
+        const suggestionType = this.action_type;
+        const suggestionText = this.text;
         let suggestionDetail = '';
         
         switch (suggestionType) {
@@ -230,15 +228,18 @@ class SuggestionBlot extends Inline {
 
 
     acceptSuggestion() {
-        const index = this.offset(this.quillRef.current.getEditor().scroll);
-        console.log("Suggestion blot index stored: ", this.domNode.getAttribute('position'));
-        console.log("Calculated index: ", index);
+        
+        const index = this.offset(this.scroll);
+        const length = this.children.tail.text.length;
+
         const detail = {
-            'id' : this.domNode.getAttribute('id'),
-            'action_type' : this.domNode.getAttribute('action_type'),
-            'text' : this.domNode.getAttribute('text'),
-            'position' : this.domNode.getAttribute('position')
+            'action_id' : this.action_id,
+            'action_type' : this.action_type,
+            'text' : this.text,
+            'start' : index,
+            'end' : index + length
         }
+        console.log("[SuggestionBlot] Accept suggestion, data:", detail) 
         // Dispatch custom event
         this.domNode.dispatchEvent(new CustomEvent('accept-suggestion', {
             bubbles: true,
@@ -247,14 +248,15 @@ class SuggestionBlot extends Inline {
     }
 
     rejectSuggestion() {
-        const index = this.offset(this.quillRef.current.getEditor().scroll);
-        console.log("Suggestion blot index stored: ", this.domNode.getAttribute('position'));
-        console.log("Calculated index: ", index);
+        const index = this.offset(this.scroll);
+        const length = this.children.tail.text.length;
+       
         const detail = {
-            'id' : this.domNode.getAttribute('id'),
-            'action_type' : this.domNode.getAttribute('action_type'),
-            'text' : this.domNode.getAttribute('text'),
-            'position' : this.domNode.getAttribute('position')
+            'action_id' : this.action_id,
+            'action_type' : this.action_type,
+            'text' : this.text,
+            'start' : index,
+            'end' : index + length
         }
         // Dispatch custom event
         this.domNode.dispatchEvent(new CustomEvent('reject-suggestion', {
