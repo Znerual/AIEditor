@@ -147,7 +147,7 @@ export const Editor = ({ documentId }) => {
 
         switch (data.status) {
             case 'generated action plan':
-                message = `Generated action plan: ${JSON.stringify(data.action_plan)}`;
+                message = `Generated action plan: ${data.action_plan}`;
                 break;
             case 'Found text position, pre_running actions':
                 
