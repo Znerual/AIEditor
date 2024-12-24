@@ -8,6 +8,7 @@ from document_manager import DocumentManager
 from autocomplete_manager import AutocompleteManager
 from dialog_manager import DialogManager
 from structure_manager import StructureManager
+from llm_manager import LLMManager
 from auth import Auth
 from functools import partial
 from models import User, Document, DocumentEditAccess,DocumentReadAccess
@@ -25,25 +26,27 @@ logger = logging.getLogger('eddy_logger')
 class SocketManager:
     _instance: Optional['SocketManager'] = None
     _socketio: Optional[SocketIO] = None
+    _llm_manager: Optional[LLMManager] = None
     _autocomplete_manager: Optional[AutocompleteManager] = None
     _structure_manager: Optional[StructureManager] = None
     _executor: Optional[ThreadPoolExecutor] = None
     current_content_selection = []
 
-    def __new__(cls, socketio, gemini_api_key, debug=False):
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self, socketio, gemini_api_key, debug=False):
-        self._init_socket_manager(socketio, gemini_api_key, debug)
+    def __init__(self, socketio, debug=False, gemini_api_key=None, anthropic_api_key=None, ollama_base_url=None):
+        self._init_socket_manager(socketio, gemini_api_key, anthropic_api_key=anthropic_api_key, ollama_base_url=ollama_base_url, debug=debug)
         
     
-    def _init_socket_manager(self, socketio, gemini_api_key, debug=False):
+    def _init_socket_manager(self, socketio, gemini_api_key=None, anthropic_api_key=None, ollama_base_url=None, debug=False):
         self._socketio = socketio
-        self._autocomplete_manager = AutocompleteManager(api_key=gemini_api_key, debug=debug)
-        self._dialog_manager = DialogManager(api_key=gemini_api_key, debug=debug)
-        self._structure_manager = StructureManager(api_key=gemini_api_key, debug=debug)
+        self._llm_manager = LLMManager(debug=debug, provider="google", ollama_base_url=ollama_base_url, gemini_api_key=gemini_api_key, anthropic_api_key=anthropic_api_key)
+        self._autocomplete_manager = AutocompleteManager(llm_manager=self._llm_manager, debug=debug)
+        self._dialog_manager = DialogManager(llm_manager=self._llm_manager, debug=debug)
+        self._structure_manager = StructureManager(llm_manager=self._llm_manager, debug=debug)
         self._executor = ThreadPoolExecutor(max_workers=5)
         self.active_users = {}
         self._setup_handlers()
