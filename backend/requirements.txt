@@ -17,3 +17,6 @@ setuptools
 Pillow
 beautifulsoup4
 fuzzywuzzy
+anthropic
+pydantic
+python-Levenshtein
