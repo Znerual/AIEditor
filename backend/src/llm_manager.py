@@ -1,3 +1,7 @@
+from pyexpat import model
+from re import A
+from turtle import st
+from pydantic_core import from_json
 import requests
 import time
 import logging
@@ -6,13 +10,15 @@ from typing import Generator, List, Dict, Optional, Any, Tuple, Union, TypedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
+from pydantic import BaseModel
 import google.generativeai as genai
 import json
 import anthropic
+import logging
+from dialog_types import FunctionCall, FindAction, EditAction, ActionType, ActionPlan
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+logger = logging.getLogger('eddy_logger')
 @dataclass
 class UsageMetrics:
     """Stores usage metrics for a user or globally."""
@@ -56,18 +62,82 @@ class UsageMetrics:
         """Returns the total usage for the current day."""
         return self.daily_metrics['input_tokens'], self.daily_metrics['output_tokens']
 
-class DebugResponse:
-    def __init__(self, text):
-        self.text = text
-
+# Debugging
 class DebugModel:
-    def __init__(self, model_name):
+    def __init__(self, model_type, model_name):
+        self.model_type = model_type
         self.model_name = model_name
 
-    def generate_content(self, prompt, **kwargs):
-        logging.debug(f"DebugModel ({self.model_name}) generating content for prompt: {prompt[:50]}...")
-        time.sleep(1)  # Simulate processing time
-        return DebugResponse(f"Debug answer for prompt: {prompt[:50]}...")
+    def generate_content(self, prompt, tools=None, safety_settings=None, generation_config=None):
+        logging.debug(f"({self.model_type}) generating content for prompt: {prompt}")
+        time.sleep(1)
+        if self.model_name == 'planning':
+            # Simulate a more elaborate action plan with some intentional errors
+            if "User:" in prompt and "important information" in prompt and "outdated policy" in prompt:
+                action1 = FindAction(find_action_text="important information", find_action_start_variable_name="info_start", find_action_end_variable_name="info_end", action_explanation="Find the important information in the document.")
+                action2 = FindAction(find_action_text="outdated policy", find_action_start_variable_name="outdated_start", find_action_end_variable_name="outdated_end", action_explanation="Locate the section with outdated policy.")
+                action3 = EditAction(action_type=ActionType.DELETE_TEXT, action_input_start_variable_name="outdated_start", action_input_end_variable_name="outdated_end", action_explanation="Remove the outdated policy section.", action_text_input="")
+                action4 = EditAction(action_type=ActionType.INSERT_TEXT, action_input_start_variable_name="info_end", action_input_end_variable_name="", action_text_input=" New updated information.", action_explanation="Add new information after the important information section.")
+                return ActionPlan(find_actions=[action1, action2], edit_actions=[action3, action4])
+            else:  
+                action1 = FindAction(find_action_text="debug", find_action_start_variable_name="data_start", find_action_end_variable_name="data_end", action_explanation="Find the beginning and end of the section 'important data'")
+                action2 = EditAction(action_type=ActionType.REPLACE_TEXT, action_input_start_variable_name="data_start", action_input_end_variable_name="data_end", action_text_input="Corrected important data.", action_explanation="Replace the text between 'data_start' and 'data_end'")
+                action3 = EditAction(action_type=ActionType.INSERT_TEXT, action_input_start_variable_name="data_end", action_input_end_variable_name="", action_text_input=" Additional context.", action_explanation="Add additional context after 'data_end'.")
+                return ActionPlan(find_actions=[action1], edit_actions=[action2, action3])
+                # return DebugResponse(text=json.dumps([
+                #     {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "debug", "find_action_start_variable_name": "data_start", "find_action_end_variable_name": "data_end", "action_explanation": "Find the beginning and end of the section 'important data'"},
+                #     {"action_type": "replace_text", "action_input_start_variable_name": "data_start", "action_input_end_variable_name": "data_end", "action_text_input": "Corrected important data.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Replace the text between 'data_start' and 'data_end'"},
+                #     {"action_type": "insert_text", "action_input_start_variable_name": "data_end", "action_input_end_variable_name": "", "action_text_input": " Additional context.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Add additional context after 'data_end'."}
+                # ]))
+        elif self.model_name == 'fix_planning':
+            # Simulate a fixed action plan
+            return DebugResponse(text=json.dumps([
+                {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "important data", "find_action_start_variable_name": "data_start", "find_action_end_variable_name": "data_end", "action_explanation": "Find the beginning and end of the section 'important data'"},
+                {"action_type": "replace_text", "action_input_start_variable_name": "data_start", "action_input_end_variable_name": "data_end", "action_text_input": "Corrected important data.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Replace the text between 'data_start' and 'data_end'"},
+                {"action_type": "insert_text", "action_input_start_variable_name": "data_end", "action_input_end_variable_name": "", "action_text_input": " Additional context.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Add additional context after 'data_end'."}
+            ]))
+        elif self.model_name == 'select_find_text_match':
+            # Simulate selecting a different match index based on the prompt
+            if "multiple matches found" in prompt:
+                return DebugResponse(text="1")  # Return index 1
+            else:
+                return DebugResponse(text="0")  # Return index 0
+        elif self.model_name == 'evaluation':
+            # Simulate a more nuanced evaluation with specific action suggestions
+            # if "reject" in prompt.lower():
+            #     return DebugResponse(
+            #         text=json.dumps({"decision": "reject", "explanation": "The plan includes a deletion of potentially important information without a clear justification. The insertion point for new text is also not well defined."}),
+            #         function_calls=[
+            #             {"action_type": "delete_text", "arguments": {"start": 10, "end": 50}, "status": "suggested"},
+            #             {"action_type": "insert_text", "arguments": {"text": "New updated information.", "position": 50}, "status": "suggested"}
+            #         ]
+            #     )
+            # else:
+            return DebugResponse(
+                text=json.dumps({"decision": "apply", "explanation": "The plan seems reasonable. The find actions correctly identify the relevant sections, and the replacement and insertion actions are appropriate."}),
+                function_calls=[
+                        {"action_type": "find_text", "arguments": {"search_text": "important data"}, "status": "executed"},
+                    {"action_type": "replace_text", "arguments": {"start": 10, "end": 40, "new_text": "Corrected important data."}, "status": "suggested"},
+                    {"action_type": "insert_text", "arguments": {"text": " Additional context.", "position": 40}, "status": "suggested"}
+                ]
+            )
+        else:
+            return DebugResponse(text="Debug response from unknown model name.")
+
+class DebugResponse:
+    def __init__(self, text=None, function_calls=None):
+        self.text = text
+        self.parts = [DebugPart(function_call=call) for call in (function_calls or [])]
+        self.candidates = [self]  # Simulate the structure needed for text extraction
+
+    def __getitem__(self, key):
+        if key == 'text':
+            return self.text
+        raise KeyError(key)
+
+class DebugPart:
+    def __init__(self, function_call=None):
+        self.function_call = FunctionCall(**function_call) if function_call else None
 
 class LLM(ABC):
     """Abstract base class for language model instances."""
@@ -75,10 +145,11 @@ class LLM(ABC):
     slow_model_name: str = "unknown"
     embedding_model_name: str = "unknown"
 
-    def __init__(self, model_mode: str, temperature: float = 0.7, response_format: Optional[Dict[str, Any]] = None, **kwargs):
+    def __init__(self, model_mode: str, temperature: float = 0.7, response_format_model: Optional[BaseModel] = None, response_format_json: Optional[dict] = None, **kwargs):
         self.model_mode = model_mode
         self.temperature = temperature
-        self.response_format = response_format
+        self.response_format_model = response_format_model
+        self.response_format_json = response_format_json
         self._model_instance = None  # Initialize in __post_init__
         self._post_init__(**kwargs)
 
@@ -104,13 +175,21 @@ class LLM(ABC):
         if mode == "embedding": return self.embedding_model_name
         raise ValueError(f"Invalid mode: {mode}")    
     
-    def _schema_to_JSON(self, schema: Type[TypedDict]) -> str:
+    def _validate_response(self, response_text):
+        """Validates that the response matches the specified schema."""
+        if self.response_format_model:
+            try:
+
+                return self.response_format_model.model_validate(from_json(response_text, allow_partial=True), strict=False)
+        
+            except Exception as e:
+                raise ValueError(f"Response validation failed: {e}\n For response: {response_text}")
+        
+        return response_text
+        
+    def _schema_to_JSON(self, schema: BaseModel) -> Dict[str, Any]:
         """Creates a system prompt that instructs the model to output in the specified format."""
-        schema_dict = {
-            field: schema.__annotations__[field].__name__ 
-            for field in schema.__annotations__
-        }
-        return json.dumps(schema_dict)
+        return schema.model_json_schema()
        
 
     def _get_python_type(self, type_annotation: Any) -> type:
@@ -129,9 +208,9 @@ class LLM(ABC):
 class DebugLLM(LLM):
     """Implementation of LLM for debug models."""
 
-    def _post_init__(self):
+    def _post_init__(self, **kwargs):
         """Initializes the debug model."""
-        self._model_instance = DebugModel(self.model_mode)
+        self._model_instance = DebugModel(self.model_mode, model_name=kwargs.get("model_name", "unknown"))
     
     def generate_content(self, prompt: str, user_id: Optional[int] = None, **kwargs) -> Any:
         """Generates content using the configured model."""
@@ -144,7 +223,8 @@ class DebugLLM(LLM):
 
             # Estimate token usage (replace with actual token counting if available)
             input_tokens = len(prompt.split())  # Rough estimate
-            output_tokens = len(response.text.split())
+            output_tokens = len(prompt.split())  # Rough estimate
+            #output_tokens = len(response.text.split())
             
             # Update usage metrics
             LLMManager.get_instance()._update_usage(user_id, self.name, input_tokens, output_tokens)
@@ -152,9 +232,9 @@ class DebugLLM(LLM):
             # Log generation details
             duration = end_time - start_time
             logging.info(f"Content generated in {duration:.2f} seconds (model: {self.name}, user: {user_id if user_id is not None else 'N/A'})")
-            logging.debug(f"Prompt: {prompt[:100]}..., Response: {response.text[:100]}...")
+            #logging.debug(f"Prompt: {prompt[:100]}..., Response: {response.text[:100]}...")
 
-            return response
+            return response # self._validate_response(response.text)
         else:
             raise ValueError("Model instance not initialized.")
 
@@ -167,41 +247,8 @@ class AnthropicLLM(LLM):
 
     def _post_init__(self, api_key):
         """Initializes the Anthropic client."""
-        
         self._model_instance = anthropic.Anthropic(api_key=api_key)
-        self._response_schema: Optional[Type[TypedDict]] = None
-        if self.response_format and 'schema' in self.response_format:
-            schema = self.response_format['schema']
-            if not isinstance(schema, type) or not issubclass(schema, TypedDict):
-                raise ValueError("Schema must be a TypedDict class")
-            self._response_schema = schema
-
-    
-    
-    def _validate_response(self, response_text: str, schema: Type[TypedDict]) -> Dict[str, Any]:
-        """Validates that the response matches the specified schema."""
-        try:
-            # Extract JSON from the response if it's wrapped in markdown code blocks
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-            
-            data = json.loads(response_text)
-            
-            # Validate types against schema
-            for field, field_type in schema.__annotations__.items():
-                if field not in data:
-                    raise ValueError(f"Missing required field: {field}")
-                if not isinstance(data[field], self._get_python_type(field_type)):
-                    raise ValueError(f"Invalid type for field {field}: expected {field_type}, got {type(data[field])}")
-            
-            return data
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON response: {e}")
-        except Exception as e:
-            raise ValueError(f"Response validation failed: {e}")
-
+       
     
 
     def generate_content(self, prompt: str, user_id: Optional[int] = None, **kwargs) -> Any:
@@ -215,8 +262,8 @@ class AnthropicLLM(LLM):
         messages = [{"role": "user", "content": prompt}]
         
         # Add system message for structured output if schema is specified
-        if self._response_schema:
-            system_prompt = self._format_system_prompt(self._response_schema)
+        if self.response_format_model:
+            system_prompt = self._format_system_prompt(self.response_format_model)
             messages.insert(0, {"role": "system", "content": system_prompt})
 
         # Create message
@@ -241,17 +288,13 @@ class AnthropicLLM(LLM):
         logging.debug(f"Prompt: {prompt[:100]}..., Response: {message.content[:100]}...")
 
         # Handle structured output if schema is specified
-        if self._response_schema:
-            try:
-                validated_response = self._validate_response(message.content, self._response_schema)
-                message.structured_output = validated_response
-            except ValueError as e:
-                logging.error(f"Response validation failed: {e}")
-                raise
+        
+        return self._validate_response(message.content)
+        
 
-        return message
+
     
-    def _format_system_prompt(self, schema: Type[TypedDict]) -> str:
+    def _format_system_prompt(self, schema: BaseModel) -> str:
         """Creates a system prompt that instructs the model to output in the specified format."""
         schema_json = self._schema_to_JSON(schema)
         return (
@@ -264,21 +307,30 @@ class AnthropicLLM(LLM):
 class GeminiLLM(LLM):
     """Implementation of LLM for Google's Gemini models."""
     fast_model_name: str = "gemini-1.5-flash-latest"
-    expensive_model_name: str = "gemini-1.5-pro-latest"
+    slow_model_name: str = "gemini-1.5-pro-latest"
     embedding_model_name: str = "embedding-001"
 
     def _post_init__(self, api_key):
         """Initializes the Gemini model."""
+        logging.info(f"Instantiating GeminiLLM for model {self.name}")
+        model_info = genai.get_model(f"models/{self.name}")
+       
+       
+
+        response_mine = "application/json" if self.response_format_json else ("application/json" if self.response_format_model else None)
+        response_schema = self.response_format_json if self.response_format_json else (self.response_format_model if self.response_format_model else None)
         genai.configure(api_key=api_key)
         self._model_instance = genai.GenerativeModel(
             self.name,
             generation_config=genai.types.GenerationConfig(
                 candidate_count=1,
                 temperature=self.temperature,
-                response_mime_type=self.response_format.get("mime_type", None) if self.response_format else None,
-                response_scheme=self.response_format.get("scheme", None) if self.response_format else None,
+                response_mime_type=response_mine,
+                response_schema=response_schema, 
+                max_output_tokens=model_info.output_token_limit,
             )
         )
+        logging.info(f"Created model {self.name} with response format: {response_mine} {response_schema}")
 
     def generate_content(self, prompt: str, user_id: Optional[int] = None, **kwargs) -> Any:
         """Generates content using the Gemini model and tracks usage."""
@@ -286,13 +338,14 @@ class GeminiLLM(LLM):
             start_time = time.time()
             
             response = self._model_instance.generate_content(prompt, **kwargs)
+            logging.info(f"Generated content: {response.text}")
             
             end_time = time.time()
 
             # Accurate token counting for Gemini models
             usage_metadata = response.usage_metadata
-            input_tokens = usage_metadata['prompt_token_count']
-            output_tokens = usage_metadata['candidates_token_count']
+            input_tokens = usage_metadata.prompt_token_count
+            output_tokens = usage_metadata.candidates_token_count
             
             # Update usage metrics
             LLMManager.get_instance()._update_usage(user_id, self.name, input_tokens, output_tokens)
@@ -303,7 +356,7 @@ class GeminiLLM(LLM):
             logging.debug(f"Prompt: {prompt[:100]}..., Response: {response.text[:100]}... Input Tokens: {input_tokens}, Output Tokens: {output_tokens}")
           
 
-            return response
+            return self._validate_response(response.text)
         else:
             raise ValueError("Model instance not initialized.")
     
@@ -349,14 +402,10 @@ class OllamaLLM(LLM):
                     logging.info(f"Pulling {self.name}: {status.get('status', '')}")
             logging.info(f"Model {self.name} pulled successfully.")
 
-        if self.response_format:
-            response_scheme=self.response_format.get("scheme", None) if self.response_format else None,
-            if response_scheme:
-                self.response_format_json = self._schema_to_JSON(response_scheme)
     def _model_exists(self, model_name: str) -> bool:
         """Checks if the model exists locally."""
         try:
-            models = self.list_models()
+            models = self.list_running_models()
             return any(model["name"] == model_name for model in models)
         except Exception as e:
             logging.error(f"Error checking if model {model_name} exists: {e}")
@@ -485,8 +534,8 @@ class OllamaLLM(LLM):
         }
 
         # Add response format if provided
-        if self.response_format:
-            payload["format"] = self.response_format_json
+        if self.response_format_model:
+            payload["format"] = self.response_format_model.model_json_schema()
 
         try:
             response = requests.post(url, headers=headers, json=payload, stream=stream)
@@ -532,8 +581,8 @@ class OllamaLLM(LLM):
         }
 
         # Add response format if provided
-        if self.response_format:
-            payload["format"] = self.response_format_json
+        if self.response_format_model:
+            payload["format"] = self.response_format_model.model_json_schema()
 
         start_time = time.time()
         try:
@@ -570,7 +619,9 @@ class OllamaLLM(LLM):
                     f"Prompt: {prompt[:100]}..., Response: {ollama_response.text[:100]}... Input Tokens: {ollama_response.usage_metadata['prompt_eval_count']}, Output Tokens: {ollama_response.usage_metadata['candidates_token_count']}"
                 )
 
-                return ollama_response
+                return self._validate_response(ollama_response.text)
+
+              
 
         except requests.exceptions.RequestException as e:
             logging.error(f"Error generating content with Ollama: {e}")
@@ -709,8 +760,9 @@ class LLMManager:
                 cls._instance = super().__new__(cls)
             return cls._instance
 
-    def __init__(self, debug: bool = False, **kwargs):
+    def __init__(self, debug: bool = False, provider: str = "google", **kwargs):
         self.debug = debug
+        self.provider = provider
         if kwargs.get("gemini_api_key", False):
             self.gemini_api_key = kwargs["gemini_api_key"]
         
@@ -724,6 +776,8 @@ class LLMManager:
         self.global_usage: Dict[str, UsageMetrics] = {} # Usage per model
         self.last_reset_hourly = datetime.now(timezone.utc)
         self.last_reset_daily = datetime.now(timezone.utc)
+
+        logger.info(f"Run the LLMManager with debug: {debug}, provider: {provider}")
             
            
     @staticmethod
@@ -765,21 +819,25 @@ class LLMManager:
             self.last_reset_daily = datetime.now(timezone.utc)
 
     def create_llm(self, 
-                provider: str, 
                 model_mode: str, 
+                provider: Optional[str] = None, 
                 temperature: float = 0.7, 
-                response_format: Optional[Dict[str, Any]] = None, 
+                response_format_model: Optional[BaseModel] = None,
+                response_format_json: Optional[dict] = None,
                 **kwargs) -> LLM:
         """Creates and registers new LLM instances for different modes."""
         
+        if provider is None:
+            provider = self.provider
+
         if self.debug:
-            llm = DebugLLM(model_mode, temperature, response_format)
+            llm = DebugLLM(model_mode, temperature, response_format_model, response_format_json, model_name=kwargs.get("model_name", "unknown"))
         elif provider.lower() == "ollama":
-            llm = OllamaLLM(model_mode, temperature, response_format, base_url=kwargs.get("base_url", None), model_file=kwargs.get("model_file", None), model_file_name=kwargs.get("model_file_name", None))
+            llm = OllamaLLM(model_mode, temperature, response_format_model, response_format_json, base_url=kwargs.get("base_url", None), model_file=kwargs.get("model_file", None), model_file_name=kwargs.get("model_file_name", None))
         elif provider.lower() == "google" or provider.lower() == "gemini":
-            llm = GeminiLLM(model_mode, temperature, response_format, api_key=self.gemini_api_key)
+            llm = GeminiLLM(model_mode, temperature, response_format_model, response_format_json, api_key=self.gemini_api_key)
         elif provider.lower() == "anthropic" or provider.lower() == "claude":
-            llm = AnthropicLLM(model_mode, temperature, response_format=response_format, api_key=self.anthropic_api_key)
+            llm = AnthropicLLM(model_mode, temperature, response_format_model, response_format_json=response_format_json, api_key=self.anthropic_api_key)
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
         
