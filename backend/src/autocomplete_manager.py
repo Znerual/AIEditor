@@ -33,15 +33,10 @@ class AutocompleteManager:
 
     _embedding_manager: Optional[EmbeddingManager] = None
 
-    def __init__(self, api_key, debug=False, content_change_ratio_threshold=0.1, window_change_ratio_threshold = 0.25,  window_size=1000):
+    def __init__(self, llm_manager, debug=False, content_change_ratio_threshold=0.1, window_change_ratio_threshold = 0.25,  window_size=1000):
         self.debug = debug
-        if debug:
-            self.model = DebugModel()
-            logging.info("AutocompleteManager running in debug mode.")
-        else:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-            logging.info("AutocompleteManager initialized with Gemini 1.5 Flash model.")
+        self.model = llm_manager.create_llm("fast")
+        
 
         self._embedding_manager = EmbeddingManager()
         self.user_content_file_selection = {}
