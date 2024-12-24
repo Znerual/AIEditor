@@ -3,12 +3,10 @@ import google.generativeai as genai
 from models import Document
 
 class StructureManager:
-    def __init__(self, api_key, debug=False):
+    def __init__(self, llm_manager, debug=False):
         self.debug = debug
-        if not debug:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
-
+        self.model = llm_manager.create_llm("slow")
+       
     def extract_structure(self, text: str) -> str:
         """
         Extracts the structure of a document from the given text.
