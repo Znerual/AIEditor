@@ -38,7 +38,7 @@ file_handler.setLevel(logging.DEBUG)  # Set the minimum logging level for the fi
 
 # Create a console handler to output logs to the console
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)  # Set the minimum logging level for the console handler
+console_handler.setLevel(logging.DEBUG)  # Set the minimum logging level for the console handler
 
 # Create a formatter and set it for both handlers
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -102,7 +102,7 @@ class FlaskApp:
             exit(1)
         # gemini_api_key = "1234" # read from environment variables
 
-        self.socket_manager = SocketManager(socketio, gemini_api_key, debug=Config.DEBUG)
+        self.socket_manager = SocketManager(socketio, gemini_api_key=gemini_api_key, debug=Config.DEBUG)
         # self.socket_manager.init_socket_manager()
 
         # setup routes
