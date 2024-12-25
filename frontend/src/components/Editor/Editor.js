@@ -864,6 +864,7 @@ export const Editor = ({ documentId }) => {
                         />
                         <ChatWindow 
                             messages={chatMessages}
+                            setMessages={setChatMessages}
                             onSend={handleChatSubmit}
                         />
                     </div>

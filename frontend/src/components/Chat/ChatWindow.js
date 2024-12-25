@@ -1,10 +1,10 @@
 import { useCallback, useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Button } from '../ui/button';
-import { Send } from 'lucide-react';
+import { Send, X } from 'lucide-react';
 import '../../styles/chatSection.css';
 
-export const ChatWindow = ({ messages, onSend }) => {
+export const ChatWindow = ({ messages, setMessages, onSend }) => {
   const [inputText, setInputText] = useState('');
   const [isPoppedOut, setIsPoppedOut] = useState(false);
   const [popupWindow, setPopupWindow] = useState(null);
@@ -26,6 +26,12 @@ export const ChatWindow = ({ messages, onSend }) => {
       event.preventDefault();
       handleSubmit();
     }
+  };
+
+  const handleDeleteMessage = (indexToDelete) => {
+    setMessages(prevMessages =>
+      prevMessages.filter((_, index) => index !== indexToDelete)
+    );
   };
 
   const handlePopOut = () => {
@@ -81,8 +87,17 @@ export const ChatWindow = ({ messages, onSend }) => {
                 message.sender === 'user' ? 'message-user' : 'message-other'
                 }`}
             >
-                {message.text}
+                <div className="message-content">
+                    {message.text}
+                </div>
+                <button
+                    onClick={() => handleDeleteMessage(index)}
+                    className="delete-button"
+                >
+                    <X className="h-3 w-3" />
+                </button>
             </div>
+            
             ))}
         </div>
         <div className="chat-input-container">
