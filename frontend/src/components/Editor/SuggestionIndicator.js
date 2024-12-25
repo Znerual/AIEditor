@@ -34,7 +34,8 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
                             top: relativeTop,
                             type: blot.action_type,
                             text: blot.text,
-                            id: blot.action_id
+                            id: blot.action_id,
+                            explanation: blot.explanation
                         });
                     }
                 }
@@ -96,25 +97,42 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
 
     const handleIndicatorHover = (e, indicator) => {
         if (!tooltipRef.current) return;
-        console.log('[SuggestionIndicator] Hover over indicator', indicator);
-        const rect = e.target.getBoundingClientRect();
-        tooltipRef.current.style.display = 'block !important'; // Force display: block
-        tooltipRef.current.style.top = `${rect.top}px`;
-        tooltipRef.current.style.left = `${rect.right + 8}px`;
+    
+        const indicatorRect = e.target.getBoundingClientRect();
+        const containerRect = indicatorRef.current.parentNode.getBoundingClientRect();
+        const tooltip = tooltipRef.current;
+    
+        // Initial position (relative to container)
+        let top = indicatorRect.top - containerRect.top + window.scrollY;
+       
+        tooltip.style.top = top + 'px';
+        tooltip.style.left = `-250px`;
+        tooltip.style.width = '250px';
+        tooltip.style.display = 'block';
         setHoveredSuggestion(indicator);
+    
+        requestAnimationFrame(() => {
+            tooltip.style.display = 'block';
+        });
+
+
     };
 
-    // const handleIndicatorHover = (e, indicator) => {
-    //     if (!tooltipRef.current) return;
-    //     console.log('[SuggestionIndicator] Hover over indicator', indicator);
-    //     const rect = e.target.getBoundingClientRect();
-    //     tooltipRef.current.style.display = 'block';
-    //     tooltipRef.current.style.top = `${rect.top}px`;
-    //     tooltipRef.current.style.left = `${rect.right + 8}px`;
-    //     setHoveredSuggestion(indicator);
-    // };
+    const handleIndicatorMouseLeave = useCallback(() => {
+        console.log('[SuggestionIndicator] Indicator mouse leave');
+        if (!tooltipRef.current) return;
+
+        // Hide the tooltip with requestAnimationFrame
+        requestAnimationFrame(() => {
+            tooltipRef.current.style.display = 'none';
+        });
+
+        setHoveredSuggestion(null);
+    }, []);
+
 
     const getTooltipContent = (suggestion) => {
+        return suggestion.explanation;
         switch (suggestion.type) {
             case 'insert':
                 return `Insert: "${suggestion.text}"`;
@@ -136,11 +154,10 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
                         className={`suggestion-indicator ${indicator.type}`}
                         style={{ top: indicator.top }}
                         onMouseEnter={(e) => handleIndicatorHover(e, indicator)}
-                        onMouseLeave={() => (tooltipRef.current.style.display = 'none')}
+                        onMouseLeave={handleIndicatorMouseLeave}
                     />
                 ))}
             </div>
-
             <div ref={tooltipRef} className="suggestion-indicator-tooltip">
                 {hoveredSuggestion && getTooltipContent(hoveredSuggestion)}
             </div>
