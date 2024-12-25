@@ -359,12 +359,12 @@ The response should be a JSON object with two main arrays:
 
             if len(action.find_action_start_variable_name) > 0:
                 if action.find_action_start_variable_name in output_variables:
-                    problems.append(f"Error: Duplicate start position variable name '{action.find_action_start_variable_name}' for action {action.action_explanation} used.")
+                    problems.append(f"Error: Duplicate start position variable name '{action.find_action_start_variable_name}'.")
                 output_variables.add(action.find_action_start_variable_name)
 
             if len(action.find_action_end_variable_name) > 0:
                 if action.find_action_end_variable_name in output_variables:
-                    problems.append(f"Error: Duplicate end position variable name '{action.find_action_end_variable_name}' for action {action.action_explanation} used.")
+                    problems.append(f"Error: Duplicate end position variable name '{action.find_action_end_variable_name}'.")
                 output_variables.add(action.find_action_end_variable_name)
             
         for action in action_plan.edit_actions:
@@ -604,7 +604,7 @@ The response should be a JSON object with two main arrays:
                 raise ValueError(f"Action {i+1}: Mismatch in start and end positions")
             
             if len(positions[action.find_action_start_variable_name]) > 1:
-                problems.append((action.find_action_start_variable_name, action.find_action_end_variable_name, f"Action {i+1}: Multiple matches found for '{search_text}' in document for action {action.action_explanation}"))
+                problems.append((action.find_action_start_variable_name, action.find_action_end_variable_name, f"Action {i+1}: Multiple matches found for '{search_text}' in document."))
                 logging.info("Too many occurences of the text ", search_text, " found")
                 continue
 
