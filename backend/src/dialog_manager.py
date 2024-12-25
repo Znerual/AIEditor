@@ -107,7 +107,20 @@ class DialogManager:
         action_plan_prompt = self._build_action_plan_prompt(user_message, history, document_text, relevant_content_excerpts)
         logging.info("Action plan prompt: " + action_plan_prompt)
         
-        action_plan: ActionPlan = self.planning_model.generate_content(action_plan_prompt)
+        try:
+            action_plan: ActionPlan = self.planning_model.generate_content(action_plan_prompt)
+        except Exception as e:
+            logging.error(f"Error generating action plan: {e}")
+            yield {"response": "Failed to generate action plan due to an error.", "suggested_edits": []}
+            history.append(DialogTurn(
+            user_message, 
+            ActionPlan(find_actions=[], edit_actions=[]),
+            [],
+            Decision.REJECT
+            ))
+            self.dialog_history[user_id] = history
+            return
+            
         logging.info(f"Generated action plan in {time.time() - plan_start:.3f}s: {str(action_plan)}")
         yield {"intermediary": {"status": "generated action plan", "action_plan": str(action_plan)}}
         plan_timing = time.time() - plan_start
@@ -143,7 +156,15 @@ class DialogManager:
                 logging.info(f"Could not fix variable naming problems after {fix_counter} iterations and {time.time() - fix_start:.3f}s")
                 yield {"response": {"status": "Fail to generate action_plan because of naming problems", 
                         "problems": variable_naming_problems}}
+                history.append(DialogTurn(
+                user_message, 
+                ActionPlan(find_actions=[], edit_actions=[]),
+                [],
+                Decision.REJECT
+                ))
+                self.dialog_history[user_id] = history
                 return
+                
 
         validation_naming_timing = time.time() - validation_start
 
@@ -166,6 +187,18 @@ class DialogManager:
                 fix_counter += 1
                 logging.info(f"Trying to fix find_text action problems: {variable_position_mistakes}")
                 action_plan = self._fix_action_plan_find_text_with_model(user_message, document_text, action_plan, variable_position_mistakes)
+                if action_plan is None:
+                    logging.error(f"Failed to fix find_text action problems")
+                    yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    history.append(DialogTurn(
+                        user_message, 
+                        ActionPlan(find_actions=[], edit_actions=[]),
+                        [],
+                        Decision.REJECT
+                    ))
+                    self.dialog_history[user_id] = history
+                    return
+        
                 variable_positions, variable_position_mistakes, variable_position_problems = self._validate_find_text_actions(document_text, action_plan)
                 logging.debug(f"Position fix iteration {fix_counter} took {time.time() - iteration_start:.3f}s")
                 
@@ -176,9 +209,18 @@ class DialogManager:
             mistakes_fix_timing = time.time() - mistakes_fix_start
                     
             if variable_position_mistakes:
-                logging.info(f"Failed to fix position mistakes after {fix_counter} iterations and {mistakes_fix_timing:.3f}s")
+                logging.error(f"Failed to fix position mistakes after {fix_counter} iterations and {mistakes_fix_timing:.3f}s")
                 yield {"response": {"status": "Failed to generate action plan due to find_text action mistakes", 
                     "problems": variable_position_mistakes}}
+                history.append(DialogTurn(
+                    user_message, 
+                    action_plan,
+                    [],
+                    Decision.REJECT
+                ))
+                self.dialog_history[user_id] = history
+                return
+
 
         if variable_position_problems:
             problems_fix_start = time.time()
@@ -196,7 +238,20 @@ class DialogManager:
                 prompt += "\n## Task:\nSelect which of the found matches is the correct one and return its index (0-based). If you think that none is correct, return -1. "
                 prompt += "## Selection (int):\n"
 
-                response = self.select_find_text_match_model.generate_content(prompt)
+                try:
+                    response = self.select_find_text_match_model.generate_content(prompt)
+                except Exception as e:
+                    logging.error(f"Error generating fix for non-exclusive matches: {e}")
+                    yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    history.append(DialogTurn(
+                        user_message, 
+                        action_plan,
+                        [],
+                        Decision.REJECT
+                    ))
+                    self.dialog_history[user_id] = history
+                    return
+                    
                 selection_str = response.text
                 logging.info(f"Model response for fixing non-exclusive matches took {time.time() - iteration_start:.3f}s: {selection_str}")
 
@@ -205,11 +260,26 @@ class DialogManager:
                 except ValueError as e:
                     logging.error(f"Failed to parse fix for non-exclusive matches in action plan from model response: {e}")
                     yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    history.append(DialogTurn(
+                        user_message, 
+                        action_plan,
+                        [],
+                        Decision.REJECT
+                    ))
+                    self.dialog_history[user_id] = history
                     return
+                    
 
                 if selection_index == -1:
                     logging.info(f"Model response for fixing non-exclusive matches in action plan: No match found")
                     yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
+                    history.append(DialogTurn(
+                        user_message, 
+                        action_plan,
+                        [],
+                        Decision.REJECT
+                    ))
+                    self.dialog_history[user_id] = history
                     return
 
                 yield {"intermediary": {"status": "Fixing match ambiguities", 
@@ -234,7 +304,19 @@ class DialogManager:
 
         eval_start = time.time()
         evaluation_prompt = self._build_evaluation_prompt(user_message, history, document_text, actions)
-        evaluation = self.evaluation_model.generate_content(evaluation_prompt)
+        try:
+            evaluation = self.evaluation_model.generate_content(evaluation_prompt)
+        except Exception as e:
+            logging.error(f"Error generating evaluation: {e}")
+            yield {"response": "Failed to generate action plan due to an error.", "suggested_edits": []}
+            history.append(DialogTurn(
+                user_message, 
+                action_plan,
+                actions,
+                Decision.REJECT
+            ))
+            self.dialog_history[user_id] = history
+            return
         evaluation_timing = time.time() - eval_start
         logging.info(f"Evaluation completed in {evaluation_timing:.3f}s: {evaluation}")
 
@@ -253,6 +335,7 @@ class DialogManager:
             user_message, 
             action_plan,
             actions,
+            evaluation.decision
         ))
         self.dialog_history[user_id] = history
         logging.debug(f"Updated dialog history in {time.time() - history_update_start:.3f}s")
@@ -338,11 +421,12 @@ The response should be a JSON object with two main arrays:
 ## Important Rules:
 1. Use descriptive but concise variable names for position references
 2. Each find action should store positions in uniquely named variables
-3. Every edit action must reference position variables from previous find actions
-4. Never assume absolute positions without a find action
-5. Provide clear, specific explanations for each edit action
-6. Consider the full context from dialog history when planning actions
-7. Reference relevant content using [content_ids] in explanations
+3. Both output variables in the find action must be unique
+4. Every edit action must reference position variables from previous find actions
+5. Never assume absolute positions without a find action
+6. Provide clear, specific explanations for each edit action
+7. Consider the full context from dialog history when planning actions
+8. Reference relevant content using [content_ids] in explanations
 
 ## Action Plan:"""
         
@@ -478,8 +562,12 @@ Important:
 ## Fixed Action Plan (JSON):"""
 
         # Query the model
-        fixed_action_plan = self.fix_planning_model.generate_content(prompt)
-        
+        try:
+            fixed_action_plan = self.fix_planning_model.generate_content(prompt)
+        except Exception as e:
+            logging.error(f"Error generating fixed action plan: {e}")
+            return None
+       
     
         logging.info(f"Model response for fixing action plan: {fixed_action_plan}")
 
@@ -535,8 +623,11 @@ Important:
         prompt += "## Fixed Action Plan (JSON):\n"
 
         # Query the model
-        fixed_action_plan = self.planning_model.generate_content(prompt)
-       
+        try:
+            fixed_action_plan = self.planning_model.generate_content(prompt)
+        except Exception as e:
+            logging.error(f"Error generating fixed action plan: {e}")
+            return None
         # Validate the fixed action plan
         validation_problems, validation_warnings = self._validate_action_plan_variables(fixed_action_plan)
         if validation_problems:
