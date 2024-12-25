@@ -160,4 +160,5 @@ class DialogTurn:
     user_message: str
     action_plan: ActionPlan
     function_calls: List[FunctionCall]
+    decision: Decision
 
