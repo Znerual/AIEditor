@@ -191,7 +191,7 @@ class DialogManager:
                 prompt += "Here is the user message, the document content, the current action plan and the identified problem.\n\n"
                 prompt += f"## User Message:\n{user_message}\n\n"
                 prompt += f"## Document Context:\n{document_text}\n\n"
-                prompt += f"## Current Action Plan:\n{json.dumps(action_plan, indent=2)}\n\n"
+                prompt += f"## Current Action Plan:\n{str(action_plan)}\n\n"
                 prompt += f"## Problem:\n{problem}\n"
                 prompt += "\n## Task:\nSelect which of the found matches is the correct one and return its index (0-based). If you think that none is correct, return -1. "
                 prompt += "## Selection (int):\n"
@@ -230,7 +230,7 @@ class DialogManager:
         prerun_start = time.time()
         actions = self._pre_run_actions(variable_positions, action_plan)
         prerun_timing = time.time() - prerun_start
-        logging.debug(f"Pre-run completed in {prerun_timing:.3f}s: {str(actions)}")
+        logging.info(f"Pre-run completed in {prerun_timing:.3f}s: {str(actions)}")
 
         eval_start = time.time()
         evaluation_prompt = self._build_evaluation_prompt(user_message, history, document_text, actions)
@@ -402,29 +402,80 @@ The response should be a JSON object with two main arrays:
         logging.info("Attempting to fix action plan with model...")
 
         # Build a prompt for the model to fix the action plan
-        prompt = "## Action Plan Repair\n\n"
-        prompt += "I have an action plan that has some problems with variable names. "
-        prompt += "Here is the user message, the document content, the current action plan and the identified problems.\n\n"
+        prompt = """## Action Plan Repair Task
 
-        prompt += f"## User Message:\n{user_message}\n\n"
+The following action plan has variable naming issues that need to be fixed while preserving the original editing intent.
 
-        prompt += f"## Document Context:\n{document_text}\n\n"
+## Original Context
+"""
+    # Add relevant context
+        prompt += f"""### User Message:
+{user_message}
 
-        prompt += f"## Current Action Plan:\n{json.dumps(action_plan, indent=2)}\n\n"
+### Document Content:
+{document_text}
 
-        prompt += f"## Problems:\n"
+### Current Action Plan:
+{str(action_plan)}
+
+### Identified Problems:
+"""
         for problem in problems:
             prompt += f"- {problem}\n"
 
-        prompt += "\n## Task:\n"
-        prompt += "Please generate a new, corrected action plan that addresses the identified variable naming problems and keeps the actions the same. " 
-        prompt += "Make sure that:\n"
-        prompt += "- All variable names are unique.\n"
-        prompt += "- All input variables used in actions have corresponding output variables from previous actions.\n"
-        prompt += "- The format of the generated action plan should match the format of the current action plan, it should be a json array of actions\n"
-        prompt += "If you cannot fix the problems, return an empty list.\n\n"
+        prompt += """
+## Repair Instructions
 
-        prompt += "## Fixed Action Plan (JSON):\n"
+Create a new action plan that:
+1. Fixes all variable naming issues
+2. Preserves the exact same editing operations
+3. Maintains the original sequence of actions
+
+### Variable Naming Rules:
+1. Each variable name must be unique across all actions
+2. Variable names should be descriptive and indicate their purpose
+3. Format: <purpose>_<location>_<type>
+   Examples:
+   - header_start_pos
+   - list_end_pos
+   - paragraph_content_start
+
+### Reference Rules:
+1. Edit actions can only reference variables defined by previous find actions
+2. Each find action must create two variables: start and end positions
+3. Variable pairs should use consistent naming:
+   - Bad:  find_start_pos, end_location
+   - Good: header_start_pos, header_end_pos
+
+### Output Format:
+Return a JSON object with two arrays:
+{
+    "find_actions": [
+        {
+            "find_action_start_variable_name": str,
+            "find_action_end_variable_name": str,
+            "find_action_text": str,
+            "action_explanation": str
+        }
+    ],
+    "edit_actions": [
+        {
+            "action_type": str,
+            "action_input_start_variable_name": str,
+            "action_input_end_variable_name": str,
+            "action_text_input": str,
+            "action_explanation": str
+        }
+    ]
+}
+
+Important:
+- If you cannot fix all problems, return an empty JSON object: {}
+- Do not change the content or order of operations
+- Only modify variable names to fix the identified problems
+- Keep all other fields (action_type, action_text_input, explanations) exactly the same
+
+## Fixed Action Plan (JSON):"""
 
         # Query the model
         fixed_action_plan = self.fix_planning_model.generate_content(prompt)
@@ -432,24 +483,14 @@ The response should be a JSON object with two main arrays:
     
         logging.info(f"Model response for fixing action plan: {fixed_action_plan}")
 
-        # try:
-        #     fixed_action_plan = json.loads(fixed_action_plan_str) # type: ignore
-        #     if isinstance(fixed_action_plan, list) and all(isinstance(action, dict) for action in fixed_action_plan):
-        #         # Perform basic validation on the structure of each action
-        #         for action in fixed_action_plan:
-        #             if not all(key in action for key in ['action_type', 'action_input_start_variable_name', 'action_input_end_variable_name', 'action_text_input', 'find_action_start_variable_name', 'find_action_end_variable_name', 'action_explanation']):
-        #                 raise ValueError("Invalid action structure")
-        #     else:
-        #         raise ValueError("Invalid action plan format")
-        
-        # except (json.JSONDecodeError, ValueError) as e:
-        #     logging.error(f"Failed to parse fixed action plan from model response: {e}")
-        #     return None
 
         # Validate the fixed action plan
-        validation_problems = self._validate_action_plan_variables(fixed_action_plan)
+        validation_problems, validation_warnings = self._validate_action_plan_variables(fixed_action_plan)
         if validation_problems:
             logging.info(f"Fixed action plan still has problems: {validation_problems}")
+
+        if validation_warnings:
+            logging.info(f"Fixed action plan still has warnings: {validation_warnings}")
            
         return fixed_action_plan
     
@@ -476,7 +517,7 @@ The response should be a JSON object with two main arrays:
         prompt += f"## User Message:\n{user_message}\n\n"
         prompt += f"## Document Context:\n{document_text}\n\n"
 
-        prompt += f"## Current Action Plan:\n{json.dumps(action_plan, indent=2)}\n\n"
+        prompt += f"## Current Action Plan:\n{str(action_plan)}\n\n"
 
         prompt += f"## Problems:\n"
         for problem in mistakes:
@@ -494,31 +535,15 @@ The response should be a JSON object with two main arrays:
         prompt += "## Fixed Action Plan (JSON):\n"
 
         # Query the model
-      
         fixed_action_plan = self.planning_model.generate_content(prompt)
-        # fixed_action_plan_str = response.text
-
-        # logging.debug(f"Model response for fixing action plan: {fixed_action_plan_str}")
-
-        # try:
-        #     fixed_action_plan = json.loads(fixed_action_plan_str) # type: ignore
-        #     if isinstance(fixed_action_plan, list) and all(isinstance(action, dict) for action in fixed_action_plan):
-        #         # Perform basic validation on the structure of each action
-        #         for action in fixed_action_plan:
-        #             if not all(key in action for key in ['action_type', 'action_input_start_variable_name', 'action_input_end_variable_name', 'action_text_input', 'find_action_start_variable_name', 'find_action_end_variable_name', 'action_explanation']):
-        #                 raise ValueError("Invalid action structure")
-        #     else:
-        #         raise ValueError("Invalid action plan format")
-
-        # except (json.JSONDecodeError, ValueError) as e:
-        #     logging.error(f"Failed to parse fixed action plan from model response: {e}")
-        #     return None
-
+       
         # Validate the fixed action plan
-        validation_problems = self._validate_action_plan_variables(fixed_action_plan)
+        validation_problems, validation_warnings = self._validate_action_plan_variables(fixed_action_plan)
         if validation_problems:
             logging.error(f"Fixed action plan still has variable naming problems: {validation_problems}")
             
+        if validation_warnings:
+            logging.info(f"Fixed action plan still has variable naming warnings: {validation_warnings}")
 
         # Further validate specifically for find_text issues
         _,find_text_mistakes, _ = self._validate_find_text_actions(document_text, fixed_action_plan)
@@ -582,7 +607,7 @@ The response should be a JSON object with two main arrays:
                     else:
                         logging.info(
                             f"Action {i + 1}: Failed to find text '{search_text}' in document "
-                            f"(best fuzzy match score below threshold: {score})"
+                            f"(best fuzzy match score below threshold: {score} for match {best_match})"
                         )
                         # Continue to the next action since no good matches were found
                         continue
@@ -647,7 +672,7 @@ The response should be a JSON object with two main arrays:
 
                 results.append(FunctionCall(
                     action_type=ActionType.INSERT_TEXT,
-                    arguments={"text": action.action_text_input, "position": variable_positions[action.action_input_start_variable_name]},
+                    arguments={"text": action.action_text_input, "position": variable_positions[action.action_input_start_variable_name], "explanation": action.action_explanation},
                     status="suggested"
                 ))
                     
@@ -664,7 +689,7 @@ The response should be a JSON object with two main arrays:
 
                 results.append(FunctionCall(
                     action_type=ActionType.DELETE_TEXT,
-                    arguments={"start": variable_positions[action.action_input_start_variable_name], "end": variable_positions[action.action_input_end_variable_name]},
+                    arguments={"start": variable_positions[action.action_input_start_variable_name], "end": variable_positions[action.action_input_end_variable_name], "explanation": action.action_explanation},
                     status="suggested"
                 ))
 
@@ -686,13 +711,13 @@ The response should be a JSON object with two main arrays:
 
                 results.append(FunctionCall(
                     action_type=ActionType.REPLACE_TEXT,
-                    arguments={"start": variable_positions[action.action_input_start_variable_name], "end": variable_positions[action.action_input_end_variable_name], "new_text": action.action_text_input},
+                    arguments={"start": variable_positions[action.action_input_start_variable_name], "end": variable_positions[action.action_input_end_variable_name], "new_text": action.action_text_input, "explanation": action.action_explanation},
                     status="suggested"
                 ))
               
         return results
     
-    def generate_evaluation_prompt(self, user_message: str, history: List[DialogTurn], document_text: str, actions: List[FunctionCall]) -> str:
+    def _build_evaluation_prompt(self, user_message: str, history: List[DialogTurn], document_text: str, actions: List[FunctionCall]) -> str:
         prompt = "## Dialog History:\n"
         # Add conversation history with past actions
         for turn in history:
@@ -737,7 +762,8 @@ Evaluate whether the proposed actions should be applied. Consider the following 
     * Could cause unintended changes
     * Are completely unrelated to the request
 
-## Evaluation Response Format:
+## Evaluation Response Format:"""
+        prompt += """
 Return a JSON object with:
 {
     "decision": "apply" or "reject",
