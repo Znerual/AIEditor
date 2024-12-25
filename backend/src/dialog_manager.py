@@ -57,14 +57,13 @@ class DialogManager:
             A dictionary containing the response text and suggested edits.
         """
         start_time = time.time()
-        
         logging.info(f"Getting response for user {user_id}, message: {user_message}, document: {document_id}, content selection: {current_content_selection}")
 
         # Retrieve dialog history
         history_start = time.time()
         history = self.dialog_history.get(user_id, [])
         logging.info(f"Retrieved dialog history in {time.time() - history_start:.3f}s")
-
+        history_timing = time.time() - history_start
         # Prepare relevant content based on selection using EmbeddingManager
         relevant_content_excerpts = []
 
@@ -72,7 +71,9 @@ class DialogManager:
         doc_start = time.time()
         document_text = str(DocumentManager.get_document_content(document_id, as_string=True))
         logging.info(f"Retrieved document content in {time.time() - doc_start:.3f}s")
+        doc_timing = time.time() - doc_start
 
+        relevant_content_timing = 0
         if current_content_selection:
             embed_start = time.time()
             try:
@@ -99,6 +100,8 @@ class DialogManager:
             except Exception as e:
                 logging.error(f"Error getting relevant content embeddings: {e}")
 
+            relevant_content_timing = time.time() - embed_start
+
         # Step 1: Create an Action Plan
         plan_start = time.time()
         action_plan_prompt = self._build_action_plan_prompt(user_message, history, document_text, relevant_content_excerpts)
@@ -107,10 +110,11 @@ class DialogManager:
         action_plan: ActionPlan = self.planning_model.generate_content(action_plan_prompt)
         logging.info(f"Generated action plan in {time.time() - plan_start:.3f}s: {str(action_plan)}")
         yield {"intermediary": {"status": "generated action plan", "action_plan": str(action_plan)}}
+        plan_timing = time.time() - plan_start
 
         # Step 2: Validate and fix the action plan
         validation_start = time.time()
-        variable_naming_problems = self._validate_action_plan_variables(action_plan)
+        variable_naming_problems, variable_naming_warnings = self._validate_action_plan_variables(action_plan)
         if variable_naming_problems:
             fix_start = time.time()
             logging.error(f"Problems found in generated action plan due to variable naming problems: {variable_naming_problems}")
@@ -124,7 +128,9 @@ class DialogManager:
                 fix_counter += 1
                 logging.info(f"Trying to fix variable naming problems: {variable_naming_problems}")
                 action_plan = self._fix_action_plan_variable_naming_with_model(user_message, document_text, action_plan, variable_naming_problems)
-                variable_naming_problems = self._validate_action_plan_variables(action_plan)
+                variable_naming_problems, variable_naming_warnings = self._validate_action_plan_variables(action_plan)
+                logging.info(f"Variable naming problems: {variable_naming_problems}")
+                logging.debug(f"Variable naming warnings: {variable_naming_warnings}")
                 logging.info(f"Fix iteration {fix_counter} took {time.time() - iteration_start:.3f}s")
                 
                 if not variable_naming_problems:
@@ -135,13 +141,17 @@ class DialogManager:
                     
             if variable_naming_problems:
                 logging.info(f"Could not fix variable naming problems after {fix_counter} iterations and {time.time() - fix_start:.3f}s")
-                return {"response": {"status": "Fail to generate action_plan because of naming problems", 
+                yield {"response": {"status": "Fail to generate action_plan because of naming problems", 
                         "problems": variable_naming_problems}}
+                return
+
+        validation_naming_timing = time.time() - validation_start
 
         position_validation_start = time.time()
         variable_positions, variable_position_mistakes, variable_position_problems = self._validate_find_text_actions(document_text, action_plan)
+        
         logging.debug(f"Validated positions in {time.time() - position_validation_start:.3f}s")
-
+        mistakes_fix_timing = 0
         if variable_position_mistakes:
             mistakes_fix_start = time.time()
             logging.info(f"Failed to generate action plan due to find_text action mistakes: {variable_position_mistakes}")
@@ -163,9 +173,10 @@ class DialogManager:
                     logging.info(f"Fixed find_text action mistakes in {time.time() - mistakes_fix_start:.3f}s")
                     yield {"intermediary": {"status": "fixed action_plan find_text action problems", 
                         "action_plan": str(action_plan)}}
+            mistakes_fix_timing = time.time() - mistakes_fix_start
                     
             if variable_position_mistakes:
-                logging.info(f"Failed to fix position mistakes after {fix_counter} iterations and {time.time() - mistakes_fix_start:.3f}s")
+                logging.info(f"Failed to fix position mistakes after {fix_counter} iterations and {mistakes_fix_timing:.3f}s")
                 yield {"response": {"status": "Failed to generate action plan due to find_text action mistakes", 
                     "problems": variable_position_mistakes}}
 
@@ -208,32 +219,31 @@ class DialogManager:
                 variable_positions[start_variable] = variable_positions[start_variable][selection_index]
                 variable_positions[end_variable] = variable_positions[end_variable][selection_index]
             
-            logging.info(f"Fixed position problems in {time.time() - problems_fix_start:.3f}s")
+            variable_position_fix_timing = time.time() - problems_fix_start
+            logging.info(f"Fixed position problems in {variable_position_fix_timing:.3f}s")
 
-        logging.debug(f"Extracted variables and positions in {time.time() - validation_start:.3f}s: {variable_positions}")
+        extracted_variables_positions_timing = time.time() - validation_start
+        logging.debug(f"Extracted variables and positions in {extracted_variables_positions_timing:.3f}s: {variable_positions}")
         yield {"intermediary": {"status": "Found text position, pre_running actions", "positions": variable_positions}}
 
         # Step 3: Pre-run and evaluate actions
         prerun_start = time.time()
         actions = self._pre_run_actions(variable_positions, action_plan)
-        logging.debug(f"Pre-run completed in {time.time() - prerun_start:.3f}s: {str(actions)}")
+        prerun_timing = time.time() - prerun_start
+        logging.debug(f"Pre-run completed in {prerun_timing:.3f}s: {str(actions)}")
 
         eval_start = time.time()
         evaluation_prompt = self._build_evaluation_prompt(user_message, history, document_text, actions)
-        evaluation_response = self.evaluation_model.generate_content(evaluation_prompt)
-        evaluation_text = evaluation_response.text
-        logging.info(f"Evaluation completed in {time.time() - eval_start:.3f}s: {evaluation_text}")
+        evaluation = self.evaluation_model.generate_content(evaluation_prompt)
+        evaluation_timing = time.time() - eval_start
+        logging.info(f"Evaluation completed in {evaluation_timing:.3f}s: {evaluation}")
 
-        try:
-            evaluation = json.loads(evaluation_text)
-        except json.JSONDecodeError:
-            logging.error(f"Failed to parse evaluation as JSON: {evaluation_text}")
-            return {"response": "Failed to apply the generated actions due to an evaluation error.", "suggested_edits": []}
-
-        if evaluation['decision'] != Decision.APPLY:
-            logging.info(f"Evaluation rejected the action plan")
-            return {"response": f"Failed to apply the generated actions due to the evaluation report: {evaluation['explanation']}.", 
+      
+        if evaluation.decision != Decision.APPLY:
+            logging.info(f"Evaluation rejected the action plan") 
+            yield {"response": f"Failed to apply the generated actions due to the evaluation report: {evaluation.explanation}.", 
                     "suggested_edits": []}
+            return
                 
         logging.info(f"Accepted change, generated function calls")
 
@@ -251,15 +261,19 @@ class DialogManager:
         logging.info(f"Total response generation time: {total_time:.3f}s")
         
         yield {
-            "response": evaluation['explanation'],
+            "response": evaluation.explanation, 
             "suggested_edits": [action.to_dict() for action in actions],
             "timing_info": {
                 "total_time": total_time,
-                "document_retrieval": time.time() - doc_start,
-                "action_plan_generation": time.time() - plan_start,
-                "validation_and_fixes": time.time() - validation_start,
-                "pre_run": time.time() - prerun_start,
-                "evaluation": time.time() - eval_start
+                "history": history_timing,
+                "document_retrieval": doc_timing,
+                "relevant_content": relevant_content_timing,
+                "action_plan_generation": plan_timing,
+                "variable_naming_problems": validation_naming_timing,
+                "variable_position_problems_fix": mistakes_fix_timing,
+                "extracted_variables_total": extracted_variables_positions_timing,
+                "pre_run": prerun_timing,
+                "evaluation": evaluation_timing
             }
         }
         return
@@ -335,10 +349,10 @@ The response should be a JSON object with two main arrays:
         return prompt
 
 
-    def _validate_action_plan_variables(self, action_plan: ActionPlan) -> List[str]:
+    def _validate_action_plan_variables(self, action_plan: ActionPlan) -> Tuple[List[str], List[str]]:
         # 1. Validate variable names and input-output consistency
         problems = []
-
+        warnings = []
         output_variables = set()
         input_variables = set()
         for action in action_plan.find_actions:
@@ -366,9 +380,9 @@ The response should be a JSON object with two main arrays:
         if missing_inputs:
             problems.append(f"Error: Missing output variables to satisfy inputs: {', '.join(missing_inputs)}")
         if unused_outputs:
-            problems.append(f"Warning: Unused output variables: {', '.join(unused_outputs)}")
+            warnings.append(f"Warning: Unused output variables: {', '.join(unused_outputs)}")
 
-        return problems
+        return problems, warnings
     
     def _fix_action_plan_variable_naming_with_model(self, user_message: str, document_text: str, action_plan: ActionPlan, problems: List[str]) -> Optional[ActionPlan]:
         """
@@ -564,9 +578,9 @@ The response should be a JSON object with two main arrays:
                                 f"Start: {start_pos}, End: {end_pos}"
                             )
                         # Add a warning message about using fuzzy matches
-                        logging.debug(f"Warning: Action {i+1}: Used fuzzy matches for '{search_text}' (best score: {score}).")
+                        logging.info(f"Warning: Action {i+1}: Used fuzzy matches for '{search_text}' (best score: {score}).")
                     else:
-                        logging.debug(
+                        logging.info(
                             f"Action {i + 1}: Failed to find text '{search_text}' in document "
                             f"(best fuzzy match score below threshold: {score})"
                         )
@@ -678,25 +692,60 @@ The response should be a JSON object with two main arrays:
               
         return results
     
-    def _build_evaluation_prompt(self, user_message: str, history: List[DialogTurn], document_text: str, actions: List[FunctionCall]) -> str:
-        """Builds the prompt for evaluating the action plan."""
+    def generate_evaluation_prompt(self, user_message: str, history: List[DialogTurn], document_text: str, actions: List[FunctionCall]) -> str:
         prompt = "## Dialog History:\n"
+        # Add conversation history with past actions
         for turn in history:
             prompt += f"User: {turn.user_message}\n"
-            past_actions = '\n -'.join([str(past_action) for past_action in turn.function_calls]) # type: ignore
-            prompt += f"Agent (Actions):\n{past_actions}\n"
-
-        prompt += "\n## User Message:\n"
-        prompt += user_message
-        if not user_message.endswith("\n"):
+            past_actions = '\n  - '.join([str(past_action) for past_action in turn.function_calls])
+            if past_actions:
+                prompt += f"Agent (Actions):\n  - {past_actions}\n"
             prompt += "\n"
-        prompt += "\n## Document:\n"
-        prompt += document_text + "\n"
-        prompt += "\n## Actions:\n"
-        current_actions = '\n -'.join([str(action) for action in actions]) # type: ignore
-        prompt += current_actions
-        prompt += "\n## Task:\nEvaluate the planed actions, do they fullfill the users request? Provide a brief summary of your evaluation and decide whether to proceed with the actions or reject the actions.\n" 
-        prompt += "## Summary:\n"
+        
+        # Add current context
+        proposed_actions = '\n  - '.join([str(action) for action in actions])
+        prompt += f"""## Current User Message:
+{user_message}
+
+## Current Document:
+{document_text}
+
+## Proposed Actions:
+- {proposed_actions}
+
+## Task:
+Evaluate whether the proposed actions should be applied. Consider the following criteria:
+
+1. Alignment with User Request:
+- Do the actions work towards fulfilling the user's request?
+- Partial fulfillment is acceptable if the actions are correct
+- Actions must not contradict the user's intent
+
+2. Safety and Consistency:
+- Actions should not result in unintended document changes
+- Each edit should have a clear purpose related to the request
+- Position variables should be properly referenced
+
+3. Acceptance Criteria:
+- ACCEPT if actions are:
+    * Aligned with user's request (even if partial)
+    * Safe and well-defined
+    * Properly structured with find operations before edits
+
+- REJECT if actions:
+    * Contradict user's intent
+    * Could cause unintended changes
+    * Are completely unrelated to the request
+
+## Evaluation Response Format:
+Return a JSON object with:
+{
+    "decision": "apply" or "reject",
+    "explanation": "Brief explanation of the decision, highlighting key factors"
+}
+
+## Evaluation:"""
+        
         return prompt
 
 
