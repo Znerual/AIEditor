@@ -1,6 +1,6 @@
+// frontend/src/components/Editor/Editor.js
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
-//import 'quill-paste-smart';
 import SuggestionBlot from './SuggestionBlot';
 import CompletionBlot from './CompletionBlot';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -8,6 +8,7 @@ import { Headerbar } from '../../components/Headerbar/Headerbar';
 import { StructurUpload } from '../../components/Sidebar/StructureUpload';
 import { ContentUpload } from '../../components/Sidebar/ContentUpload';
 import { ChatWindow } from '../../components/Chat/ChatWindow';
+import { SuggestionIndicator } from './SuggestionIndicator';
 import { DebugPanel } from '../../components/Debug/DebugPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import 'react-quill/dist/quill.snow.css';
@@ -43,14 +44,13 @@ const DEBUG_FLAGS = {
 const log = (flag, message, ...args) => {
     if (DEBUG_FLAGS[flag]) {
         const stackTrace = new Error().stack;
-        const callerLine = stackTrace.split('@')[0].split('.').pop().trim(); // Get the second line (caller)
+        const callerLine = stackTrace.split('@')[0].split('.').pop().trim();
         
         console.log(`[${flag}](${callerLine}) ${message}`, ...args);
     }
 };
 
 export const Editor = ({ documentId }) => {
-    // State management
     const [showAlert, setShowAlert] = useState(false);
     const [alertMessage, setAlertMessage ] = useState('');
     const [activeUsers, setActiveUsers] = useState([]);
@@ -70,16 +70,12 @@ export const Editor = ({ documentId }) => {
     const [showStructureConfirmation, setShowStructureConfirmation] = useState(false);
     const [restructuredDocument, setRestructuredDocument] = useState('');
     const requestCounter = useRef(0);
-    const lastRequestIdRef = useRef(null); // Use a ref to allow for latest updates without rerendering
+    const lastRequestIdRef = useRef(null);
     const debounceTimerRef = useRef(null);
     const pendingRequestRef = useRef(null);
     const quillRef = useRef(null);
+    const suggestionIndicatorRef = useRef(null);
     const { user, logout } = useAuth();
-
-    // const autocompletionSuggestionStyle = { 
-    //     color: '#888',
-    //     backgroundColor: '#f0f0f0',
-    // };
 
     const DEBOUNCE_WAITING_TIME = 500; // Time in milliseconds to wait before sending a request
 
@@ -117,7 +113,6 @@ export const Editor = ({ documentId }) => {
 
     const handleStructureParsed = useCallback((newContent) => {
         quillRef.current.getEditor().setContents(newContent, 'silent');
-        //setEditorContent(newContent);
     }, []);
 
     const handleStructureUpload = useCallback(async (data) => {
@@ -132,8 +127,7 @@ export const Editor = ({ documentId }) => {
         log('CONTENT', "Extracted content:", extractedContent);
         // Update state with extracted content
         emit('client_content_changes', extractedContent);
-        // You can now do something with the extractedContent, like sending it to a server or storing it
-
+       
     }, []);
 
     const handleChatAnswerIntermediary = useCallback((data) => {
@@ -216,6 +210,7 @@ export const Editor = ({ documentId }) => {
                 action_id: edit.id, // Or a unique ID from the backend
                 action_type: 'insert',
                 text: edit.arguments.text,
+                explanation: edit.arguments.explanation,
                 };
 
                 log('CHAT', 'Inserting suggestion with data:', insertData);
@@ -229,8 +224,9 @@ export const Editor = ({ documentId }) => {
                 const deleteData = {
                 action_id: edit.id, // Unique ID for the suggestion
                 action_type: 'delete',
+                explanation: edit.arguments.explanation,
                 };
-                //const suggestionTextROI = quill.getText(start, end - start);
+
                 const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : deleteData});
                 quill.updateContents(new_delta, 'api');
                 
@@ -241,12 +237,16 @@ export const Editor = ({ documentId }) => {
                 action_id: edit.id, // Unique ID for the suggestion
                 action_type: 'replace',
                 text: edit.arguments.new_text,
+                explanation: edit.arguments.explanation,
                 };
                
                 const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : replaceData});
                 quill.updateContents(new_delta, 'api');
                
             }
+
+            suggestionIndicatorRef.current?.updateIndicators();
+
             });
         }
     }, []);
@@ -254,7 +254,7 @@ export const Editor = ({ documentId }) => {
     const handleAutocompletion = useCallback((event) => {
         if (event.requestId !== lastRequestIdRef.current) {
             log('AUTOCOMPLETION', "Ignoring outdated suggestion response", lastRequestIdRef.current, event.requestId);
-            return; // Ignore outdated responses
+            return;
         }
 
         log('AUTOCOMPLETION', "Show Autocompletion", event);
@@ -296,7 +296,6 @@ export const Editor = ({ documentId }) => {
         // Show the first suggestion
         const new_delta = new Delta().retain(insertIndex).insert(suggestionText, {'completion' : true});
         quillEditor.updateContents(new_delta, 'silent');
-        // quillEditor.insertText(insertIndex, suggestionText, 'completion', 'silent'); // Insert with custom formats
         quillEditor.setSelection(insertIndex + suggestionText.length, 0, 'silent');
     
         setAutocompletionSuggestions(event.suggestions);
@@ -323,7 +322,6 @@ export const Editor = ({ documentId }) => {
 
            
             quillRef.current.getEditor().setContents(currentDelta, 'silent');
-            //setEditorContent(event.content);
             setCurrentDocumentTitle(event.title);
         }
     }, []);
@@ -370,7 +368,6 @@ export const Editor = ({ documentId }) => {
 
                 const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).delete(oldLength).insert(newText, {'completion' : true});
                 quillEditor.updateContents(new_delta, 'silent');
-                // quillEditor.insertText(cursorPositionBeforeSuggestion, newSuggestion, 'completion', 'silent');
                 quillEditor.setSelection(cursorPositionBeforeSuggestion + newText.length, 0, 'silent');
 
                 setAutocompletionSuggestionIndex(newIndex);
@@ -387,20 +384,10 @@ export const Editor = ({ documentId }) => {
                 
                 const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).retain(suggestionText.length, {'completion' : null}).delete(1); 
                 quillEditor.updateContents(new_delta, 'silent');
-                //uillEditor.deleteText(cursorPositionBeforeSuggestion, suggestionText.length + 1, 'silent');
-               
-                // Insert the final text with normal formatting
-                //quillEditor.insertText(cursorPositionBeforeSuggestion, suggestionText, 'silent');
-                //quillEditor.removeFormat(cursorPositionBeforeSuggestion, suggestionText.length, 'silent');
-               
+
                 // Move cursor to end of inserted text
                 quillEditor.setSelection(cursorPositionBeforeSuggestion + suggestionText.length, 0, 'silent');
-                
-                
-                // Delete the created tab/enter character when accepting the suggestion
-                //quillEditor.deleteText(cursorPositionBeforeSuggestion + suggestionText.length, 1, 'silent');
-                //log('SUGGESTION_LOGIC', "Delete first character at current position:", JSON.stringify(cursorPositionBeforeSuggestion + suggestionText.length))
-
+        
                 // Clean up suggestion state
                 const delta = new Delta();
                 delta.retain(cursorPositionBeforeSuggestion);
@@ -465,38 +452,13 @@ export const Editor = ({ documentId }) => {
                         return;
                     }
 
-                    // Update the display with partially accepted suggestion
-                    // if (cursorPositionBeforeSuggestion) {
-                    //     quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
-                    //     //quillEditor.removeFormat(cursorPositionBeforeSuggestion, newTypedText.length, 'silent');
-                    // }
                     const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).retain(newTypedText.length, {'completion' : null});
-                    quillEditor.updateContents(new_delta, 'silent');
-                    // Insert accepted part in black
-                    // quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
-
-                    // // Insert remaining suggestion in gray
-                    // const remainingSuggestion = currentSuggestion.slice(newTypedText.length);
-                    // quillEditor.insertText(
-                    //     cursorPositionBeforeSuggestion + newTypedText.length,
-                    //     remainingSuggestion,
-                    //     'completion',
-                    //     'silent'
-                    // );
-                    
+                    quillEditor.updateContents(new_delta, 'silent');               
                     quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
                      
     
                 } else {
-                    // If there's a mismatch, remove the suggestion
-                    // if (cursorPositionBeforeSuggestion) {
-                    //     quillEditor.deleteText(cursorPositionBeforeSuggestion, currentSuggestion.length, 'silent');
-                    // }
-                    
-                    // // Insert the typed text
-                    // quillEditor.insertText(cursorPositionBeforeSuggestion, newTypedText, 'silent');
-                    // quillEditor.setSelection(cursorPositionBeforeSuggestion + newTypedText.length, 0, 'silent');
-                    
+                   
                     const new_delta = new Delta().retain(cursorPositionBeforeSuggestion).delete(currentSuggestion.length).insert(newTypedText);
                     quillEditor.updateContents(new_delta, 'silent');
 
@@ -554,10 +516,7 @@ export const Editor = ({ documentId }) => {
             return;
         }
         quillRef.current.getEditor().setContents(data.content, 'silent');
-        //setEditorContent(data.content);
         setShowStructureConfirmation(false);
-        // Optionally, clear the restructuredDocument state if you don't need it anymore
-        
         setRestructuredDocument('');
     }, [documentId]);
 
@@ -658,7 +617,7 @@ export const Editor = ({ documentId }) => {
             pendingRequestRef.current = {
                 documentId,
                 cursorPosition: index,
-                requestId: lastRequestIdRef.current, // Generate a unique request ID
+                requestId: lastRequestIdRef.current,
             };
 
             
@@ -688,21 +647,9 @@ export const Editor = ({ documentId }) => {
             }, DEBOUNCE_WAITING_TIME);
         }
         
-        //quillRef.current.getEditor().setContents(content, 'silent');
-
-        // if (process.env.REACT_APP_DEBUG) {
-        //     setDebugEvents(prev => [...prev, { 
-        //         type: 'editor_change',
-        //         content,
-        //         delta,
-        //         timestamp: new Date()
-        //     }]);
-        // }
     }, [documentId, emit, showAutocompletionSuggestions]);
 
     // Suggestion Logic
-
-    // Custom Event Handlers (in MainApp)
     const handleAcceptSuggestion = useCallback((event) => {
         log('SUGGESTION_LOGIC', "Accept suggestion event triggered", event);
         const data = event.detail;
@@ -715,20 +662,18 @@ export const Editor = ({ documentId }) => {
         if (data.action_type === 'insert') {
             const new_delta = new Delta().retain(data.start).delete(1).insert(data.text);
             quill.updateContents(new_delta, 'silent');
-            // quill.deleteText(data.start, 1, 'silent');
-            // quill.insertText(data.start, data.text, 'silent');
         } else if (data.action_type === 'delete') {
             const new_delta = new Delta().retain(data.start).delete(data.end-data.start);
             quill.updateContents(new_delta, 'silent');
-            //quill.deleteText(data.start, data.end - data.start, 'silent');
         } else if (data.action_type === 'replace') {
             const new_delta = new Delta().retain(data.start).delete(data.end-data.start).insert(data.text);
             quill.updateContents(new_delta, 'silent');
-            // quill.deleteText(data.start, data.end - data.start, 'silent');
-            // quill.insertText(data.start, data.text, 'silent');
         } else {
             log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
+
+        suggestionIndicatorRef.current?.updateIndicators();
+
 
         // Emit event to backend
         emit('client_apply_edit', {
@@ -755,22 +700,17 @@ export const Editor = ({ documentId }) => {
         if (data.action_type === 'insert') {
             const new_delta = new Delta().retain(data.start).delete(1);
             quill.updateContents(new_delta, 'silent');
-            // quill.deleteText(data.start, 1, 'silent');
         } else if (data.action_type === 'delete') {
             const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'suggestion' : null});
             quill.updateContents(new_delta, 'silent');
-            // const suggestionTextROI = quill.getText(data.start, data.end - data.start);
-            // quill.deleteText(data.start, data.end - data.start, 'silent');
-            // quill.insertText(data.start, suggestionTextROI, 'silent');
         } else if (data.action_type === 'replace') {
             const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'suggestion' : null});
             quill.updateContents(new_delta, 'silent');
-            // const suggestionTextROI = quill.getText(data.start, data.end - data.start);
-            // quill.deleteText(data.start, data.end - data.start, 'silent');
-            // quill.insertText(data.start, data.text, suggestionTextROI, 'silent');
         } else {
             log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
+
+        suggestionIndicatorRef.current?.updateIndicators();
         
         emit('client_apply_edit', {
             documentId,
@@ -813,9 +753,8 @@ export const Editor = ({ documentId }) => {
             return;
         }
         setEditorContentD(restructuredDocument);
-        //quillRef.current.setText(restructuredDocument, 'silent');
         setShowStructureConfirmation(false);
-        // Optionally, clear the restructuredDocument state if you don't need it anymore
+        
         emit('client_structure_accepted', {'documentId' : documentId, 'content': restructuredDocument});
         setRestructuredDocument('');
     }, [restructuredDocument]);
@@ -874,9 +813,9 @@ export const Editor = ({ documentId }) => {
                         ref={quillRef}
                         value={editorContent}
                         onChange={handleEditorChange}
-                        //onChangeSelection={handleEditorSelectionChange}
                         modules={modules}
                     />
+                    <SuggestionIndicator quillRef={quillRef} ref={suggestionIndicatorRef}  />
                 </div>
                 {showStructureConfirmation && (
                     <div className="structure-preview">
@@ -897,12 +836,6 @@ export const Editor = ({ documentId }) => {
                     </div>
                 )}
 
-                {/* {process.env.REACT_APP_DEBUG_PANE && (
-                    <DebugPanel 
-                        events={debugEvents}
-                        socketStatus={status}
-                    />
-                )} */}
             </div>
         </div>
     );

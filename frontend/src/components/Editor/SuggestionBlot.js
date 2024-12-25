@@ -13,20 +13,10 @@ class SuggestionBlot extends Inline {
         this.description = null;
         this.action_type = value.action_type;
         this.text = value.text;
+        this.explanation = value.explanation;
         this.action_id = value.action_id;
        
         console.log('[SuggestionBlot] Constructed DOM node ', domNode);
-        // if (value) {
-        //     this.description = null;
-        //     this.decisionButtons = null;
-        //     this.domNode.setAttribute('data.suggestion', 'true');
-        //     this.type = value.type;
-        //     this.value = value;
-            
-        //     console.log('[SuggestionBlot] Created suggestion blot with data:', value, " on DOM node ", domNode);
-
-        // }
-        
     }
 
     static create(data) {
@@ -76,14 +66,6 @@ class SuggestionBlot extends Inline {
     static formats(node) {
         return true;
     }
-    // static formats(node) {
-    //     return node.getAttribute('dataset.type');
-    //     // if (node.hasAttribute('data.suggestion') && node.data.suggestion) {
-    //     //     return true;
-    //     // }
-    //     // return false;
-        
-    // }
     
     handleClick(event) {
         event.preventDefault();
