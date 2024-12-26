@@ -87,8 +87,7 @@ export const DocumentManagement = () => {
                                 <th>Created At</th>
                                 <th>Last Modified</th>
                                 <th>Size (KB)</th>
-                                <th>Read Access</th>
-                                <th>Edit Access</th>
+                                <th>Collaborators</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -100,29 +99,18 @@ export const DocumentManagement = () => {
                                             {doc.id}
                                         </button>
                                     </td>
-                                    <td>{doc.title}</td>
+                                    <td>{doc.title} Man. set {doc.title_manually_set}</td>
                                     <td>{doc.user_id}</td>
                                     <td>{new Date(doc.created_at).toLocaleString()}</td>
                                     <td>{new Date(doc.last_modified).toLocaleString()}</td>
                                     <td>{doc.size_kb}</td>
                                     <td>
                                         <ul>
-                                            {doc.read_access_entries.map(entry => (
+                                            {doc.collaborators.map(entry => (
                                                 <li key={entry.id}>
                                                 User ID: {entry.user_id},  
-                                                Email: {entry.user ? entry.user.email : 'N/A'}, 
-                                                Granted At: {new Date(entry.granted_at).toLocaleString()}
-                                            </li>
-                                            ))}
-                                        </ul>
-                                    </td>
-                                    <td>
-                                        <ul>
-                                            {doc.edit_access_entries.map(entry => (
-                                                <li key={entry.id}>
-                                                User ID: {entry.user_id}, 
-                                                Email: {entry.user ? entry.user.email : 'N/A'}, 
-                                                Granted At: {new Date(entry.granted_at).toLocaleString()}
+                                                Email: {entry.email}, 
+                                                Access: {entry.access}
                                             </li>
                                             ))}
                                         </ul>
