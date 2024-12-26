@@ -126,7 +126,7 @@ class AutocompleteManager:
         start = max(0, cursor_position - self.window_size // 2)
         end = min(len(content), cursor_position + self.window_size // 2)
         
-        window_text = content[start:end]
+        window_text = content[start:cursor_position] + '*CURSOR*' + content[cursor_position:end]
         relative_cursor = cursor_position - start
         
         logging.debug(f"Window extracted: {window_text[:100]}..., relative cursor: {relative_cursor}, window start: {start}")
@@ -228,12 +228,11 @@ class AutocompleteManager:
             Related Information:
             {rag_context}
             
-            Cursor Position: {relative_cursor}
-            
             Current Context: {window_text}
             
             Based on both the current context and related information, provide 3 brief, 
             relevant completion suggestions that would be most helpful for continuing the text.
+            The *CURSOR* indicates the position at which you should insert the completion.
             Prefer specific, contextual completions over generic ones. 
             Only output the suggestions, one per line.
             """
@@ -243,7 +242,7 @@ class AutocompleteManager:
             
             suggestions = [
                 ' '.join(suggestion.split()) # clear tabs, newlines, trainling whitespaces
-                for suggestion in response.text.split('\n')
+                for suggestion in response.split('\n')
                 if suggestion.strip()
             ]
             logging.debug(f"Suggestions generated: {suggestions}")
@@ -264,7 +263,7 @@ class AutocompleteManager:
         try:
             prompt = f"Generate a concise title for the following text:\n\n{text}\n\nTitle:"
             response = self.model.generate_content(prompt)
-            title = response.text.strip()
+            title = response.strip()
             logging.info(f"Title generated successfully: {title}")
             return title
         
