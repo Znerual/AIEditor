@@ -147,6 +147,7 @@ npx create-react-app frontend
 npm install react-quill @radix-ui/react-collapsible lucide-react --save
 npm install react-router-dom --save
 npm install react-confetti --save
+npm install highlight.js --save
 ```
 
 3. Set up TailwindCSS:
