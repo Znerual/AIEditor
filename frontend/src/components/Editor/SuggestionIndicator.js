@@ -18,12 +18,12 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
         const toolbarHeight = toolbarRef.current ? toolbarRef.current.offsetHeight : 0; // Get toolbar height
         const newIndicators = [];
 
-        console.log('[SuggestionIndicator] Updating indicators, toolbar height:', toolbarHeight);
+        // console.log('[SuggestionIndicator] Updating indicators, toolbar height:', toolbarHeight);
 
         quill.getLines().forEach(line => {
             line.children.forEach(blot => {
                 if (blot.statics.blotName === 'suggestion') {
-                    console.log('[SuggestionIndicator] Found suggestion blot', blot);
+                    // console.log('[SuggestionIndicator] Found suggestion blot', blot);
                     if (blot.action_id) {
                         const index = quill.getIndex(blot);
                         const bounds = quill.getBounds(index);
@@ -42,7 +42,7 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
             });
         });
 
-        console.log('[SuggestionIndicator] New indicators:', newIndicators);
+        // console.log('[SuggestionIndicator] New indicators:', newIndicators);
         setIndicators(newIndicators);
     }, [quillRef]);
 
@@ -71,7 +71,6 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
 
         // Assuming your toolbar has an id="toolbar"
         toolbarRef.current = document.querySelector('.ql-toolbar.ql-snow'); // Target by class
-        console.log("Toolbar element:", toolbarRef.current, toolbarRef.current.offsetHeight);
 
         const handleScroll = () => {
             console.log('[SuggestionIndicator] Editor content scrolled');
@@ -133,16 +132,6 @@ export const SuggestionIndicator = forwardRef(({ quillRef }, ref) => {
 
     const getTooltipContent = (suggestion) => {
         return suggestion.explanation;
-        switch (suggestion.type) {
-            case 'insert':
-                return `Insert: "${suggestion.text}"`;
-            case 'delete':
-                return 'Delete selected text';
-            case 'replace':
-                return `Replace with: "${suggestion.text}"`;
-            default:
-                return 'Unknown suggestion type';
-        }
     };
 
     return (
