@@ -224,7 +224,7 @@ class SocketManager:
                     raise ValueError("Document not found")
                 
                 #print("Document", document)
-                content_str = DocumentManager.get_document_content(document, as_string=True)
+                content_str: str = DocumentManager.get_document_text(document) # type: ignore
                 #print("Content str", content_str)
                  # Get and emit autocompletion suggestions
                 suggestions = self._autocomplete_manager.get_suggestions(
@@ -329,7 +329,7 @@ class SocketManager:
                     self.emit_event(WebSocketEvent('server_error', {'message': 'Document not found'}))
                     return
 
-                structure_text = DocumentManager.get_document_content(document, as_string=True)
+                structure_text = DocumentManager.get_document_text(document)
             
             if not structure_text or structure_text == "":
                 self.emit_event(WebSocketEvent('server_error', {'message': 'Missing text_extracted'}))
