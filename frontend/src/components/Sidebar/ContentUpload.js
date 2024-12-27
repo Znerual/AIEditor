@@ -39,25 +39,23 @@ export const ContentUpload = ({ title, onUpload }) => {
     };
 
     useEffect(() => {
-      console.log("Trigger updating the updatedFiles");
+      if (!fileSelections) return;
       // Filter fileSelections to only include selected files (where value is true)
       const selectedFileNames = Object.entries(fileSelections)
           .filter(([key, value]) => value)
           .map(([key]) => key);
 
-      console.log("selectedFileNames", selectedFileNames);
 
       // Filter selectedFiles to only include files that are selected
       const updatedFiles = selectedFiles.filter(file => selectedFileNames.includes(file.filename));
       
-      console.log("updatedFiles", updatedFiles);
+  
       const updatesFilesIdAndContent = updatedFiles.map(file => {
         return {
           file_id: file.file_id,
           content_type: file.content_type,
         }
       });
-      console.log("updatesFilesIdAndContent", updatesFilesIdAndContent);
       
       onUpload(updatesFilesIdAndContent);
     }, [selectedFiles, fileSelections, onUpload]);
