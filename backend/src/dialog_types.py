@@ -1,3 +1,4 @@
+# /backend/src/dialog_types.py
 import enum
 from typing import Any, Dict, List, Optional, Union
 import typing
@@ -13,11 +14,10 @@ ActionPlanFormat = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "find_action_start_variable_name": {"type": "string"},
-                    "find_action_end_variable_name": {"type": "string"},
+                    "find_action_variable_name": {"type": "string"},
                     "find_action_text": {"type": "string"},
                 },
-                "required": ["find_action_start_variable_name", "find_action_end_variable_name", "find_action_text"]
+                "required": ["find_action_variable_name", "find_action_text"]
             }
         },
         "edit_actions": {
@@ -25,17 +25,37 @@ ActionPlanFormat = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "action_type": {"type": "string"},
-                    "action_input_start_variable_name": {"type": "string"},
-                    "action_input_end_variable_name": {"type": "string"},
+                    "action_type": {
+                        "type": "string",
+                        "enum": ["insert_text", "delete_text", "replace_text"]
+                    },
+                    "position_variable_name": {"type": "string"},
+                    "selection_length": {"type": "integer"},
                     "action_text_input": {"type": "string"},
                     "action_explanation": {"type": "string"}
                 },
-                "required": ["action_type", "action_input_start_variable_name", "action_input_end_variable_name", "action_text_input", "action_explanation"]
+                "required": ["action_type", "position_variable_name", "selection_length", "action_text_input", "action_explanation"]
+            }
+        },
+        "format_actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "action_type": {
+                        "type": "string",
+                        "enum": ["change_heading_level_formatting", "make_list_formatting", "remove_list_formatting", "insert_code_block_formatting", "remove_code_block_formatting", "make_bold_formatting", "remove_bold_formatting", "make_italic_formatting", "remove_italic_formatting", "make_strikethrough_formatting", "remove_strikethrough_formatting", "make_underline_formatting", "remove_underline_formatting"]
+                    },
+                    "position_variable_name": {"type": "string"},
+                    "selection_length": {"type": "integer"},
+                    "format_parameter": {"type": "string"},
+                    "action_explanation": {"type": "string"}
+                },
+                "required": ["action_type", "position_variable_name", "selection_length", "format_parameter", "action_explanation"]
             }
         }
     },
-    "required": ["find_actions", "edit_actions"]
+    "required": ["find_actions", "edit_actions", "format_actions"]
 }
 
 class ActionType(enum.Enum):
@@ -43,6 +63,19 @@ class ActionType(enum.Enum):
     DELETE_TEXT = "delete_text"
     REPLACE_TEXT = "replace_text"
     FIND_TEXT = "find_text"
+    CHANGE_HEADING_LEVEL_FORMATTING = "change_heading_level_formatting"
+    MAKE_LIST_FORMATTING = "make_list_formatting"
+    REMOVE_LIST_FORMATTING = "remove_list_formatting"
+    INSERT_CODE_BLOCK_FORMATTING = "insert_code_block_formatting"
+    REMOVE_CODE_BLOCK_FORMATTING = "remove_code_block_formatting"
+    MAKE_BOLD_FORMATTING = "make_bold_formatting"
+    REMOVE_BOLD_FORMATTING = "remove_bold_formatting"
+    MAKE_ITALIC_FORMATTING = "make_italic_formatting"
+    REMOVE_ITALIC_FORMATTING = "remove_italic_formatting"
+    MAKE_STRIKETHROUGH_FORMATTING = "make_strikethrough_formatting"
+    REMOVE_STRIKETHROUGH_FORMATTING = "remove_strikethrough_formatting"
+    MAKE_UNDERLINE_FORMATTING = "make_underline_formatting"
+    REMOVE_UNDERLINE_FORMATTING = "remove_underline_formatting"
 
     def __eq__(self, value: object) -> bool:
         if isinstance(value, str):
@@ -64,48 +97,118 @@ class EditActionType(enum.Enum):
     
     def __str__(self) -> str:
         return self.value
-    
+
+class FormatActionType(enum.Enum):
+    CHANGE_HEADING_LEVEL_FORMATTING = "change_heading_level_formatting"
+    MAKE_LIST_FORMATTING = "make_list_formatting"
+    REMOVE_LIST_FORMATTING = "remove_list_formatting"
+    INSERT_CODE_BLOCK_FORMATTING = "insert_code_block_formatting"
+    REMOVE_CODE_BLOCK_FORMATTING = "remove_code_block_formatting"
+    MAKE_BOLD_FORMATTING = "make_bold_formatting"
+    REMOVE_BOLD_FORMATTING = "remove_bold_formatting"
+    MAKE_ITALIC_FORMATTING = "make_italic_formatting"
+    REMOVE_ITALIC_FORMATTING = "remove_italic_formatting"
+    MAKE_STRIKETHROUGH_FORMATTING = "make_strikethrough_formatting"
+    REMOVE_STRIKETHROUGH_FORMATTING = "remove_strikethrough_formatting"
+    MAKE_UNDERLINE_FORMATTING = "make_underline_formatting"
+    REMOVE_UNDERLINE_FORMATTING = "remove_underline_formatting"
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, str):
+            return value == self.value
+        return super().__eq__(value)
+
+    def __str__(self) -> str:
+        return self.value
+
 class Decision(enum.Enum):
     APPLY = "apply"
     REJECT = "reject"
 
     def __str__(self) -> str:
         return self.value
-    
+
     def __eq__(self, value: object) -> bool:
         if isinstance(value, str):
             return value == self.value
         return super().__eq__(value)
-    
+
 class ListIndex(BaseModel):
     index: int
 
 class FindAction(BaseModel):
-    find_action_start_variable_name: str
-    find_action_end_variable_name: str
+    find_action_variable_name: str
     find_action_text: str
 
     def __str__(self) -> str:
-        return f"find_text({self.find_action_text}) -> {self.find_action_start_variable_name}, {self.find_action_end_variable_name}"
+        return f"find_text({self.find_action_text}) -> {self.find_action_variable_name}"
 
 class EditAction(BaseModel):
     action_type: EditActionType
-    action_input_start_variable_name : str
-    action_input_end_variable_name : str
+    position_variable_name : str
+    selection_length : int
     action_text_input: str
     action_explanation: str
 
-
     def __str__(self):
         if self.action_type == EditActionType.INSERT_TEXT:
-            return f"{str(self.action_type)}(start={self.action_input_start_variable_name}, text={self.action_text_input}) [{self.action_explanation}]"
-        
+            return f"{str(self.action_type)}(start={self.position_variable_name}, text={self.action_text_input}) [{self.action_explanation}]"
+
         elif self.action_type == EditActionType.DELETE_TEXT:
-            return f"{str(self.action_type)}(start={self.action_input_start_variable_name}, end={self.action_input_end_variable_name}) [{self.action_explanation}]"
-        
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
         elif self.action_type == EditActionType.REPLACE_TEXT:
-            return f"{str(self.action_type)}(start={self.action_input_start_variable_name}, end={self.action_input_end_variable_name}, new_text={self.action_text_input}) [{self.action_explanation}]"
-        
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}, new_text={self.action_text_input}) [{self.action_explanation}]"
+
+        else:
+            return f"Unknown action type: {self.action_type}"
+
+class FormatAction(BaseModel):
+    action_type: FormatActionType
+    position_variable_name : str
+    selection_length : int
+    format_parameter: str
+    action_explanation: str
+
+    def __str__(self):
+        if self.action_type == FormatActionType.CHANGE_HEADING_LEVEL_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}, new_level={self.format_parameter}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.MAKE_LIST_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.REMOVE_LIST_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.INSERT_CODE_BLOCK_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}, language={self.format_parameter}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.REMOVE_CODE_BLOCK_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.MAKE_BOLD_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.REMOVE_BOLD_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.MAKE_ITALIC_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.REMOVE_ITALIC_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.MAKE_STRIKETHROUGH_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.REMOVE_STRIKETHROUGH_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.MAKE_UNDERLINE_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
+
+        elif self.action_type == FormatActionType.REMOVE_UNDERLINE_FORMATTING:
+            return f"{str(self.action_type)}(start={self.position_variable_name}, length={self.selection_length}) [{self.action_explanation}]"
         else:
             return f"Unknown action type: {self.action_type}"
 
@@ -129,7 +232,7 @@ class FunctionCall:
         }
     def _get_param_str(self):
         return ", ".join([f"{key}={value}" for key, value in self.arguments.items()])
-    
+
     def __str__(self):
         if self.action_type == ActionType.INSERT_TEXT:
             return f"{self.status} insert_text({self._get_param_str()})"
@@ -137,11 +240,37 @@ class FunctionCall:
             return f"{self.status} delete_text({self._get_param_str()})"
         elif self.action_type == ActionType.REPLACE_TEXT:
             return f"{self.status} replace_text({self._get_param_str()})"
+        elif self.action_type == ActionType.CHANGE_HEADING_LEVEL_FORMATTING:
+            return f"{self.status} change_heading_level_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.MAKE_LIST_FORMATTING:
+            return f"{self.status} make_list_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.REMOVE_LIST_FORMATTING:
+            return f"{self.status} remove_list_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.INSERT_CODE_BLOCK_FORMATTING:
+            return f"{self.status} insert_code_block_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.REMOVE_CODE_BLOCK_FORMATTING:
+            return f"{self.status} remove_code_block_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.MAKE_BOLD_FORMATTING:
+            return f"{self.status} make_bold_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.REMOVE_BOLD_FORMATTING:
+            return f"{self.status} remove_bold_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.MAKE_ITALIC_FORMATTING:
+            return f"{self.status} make_italic_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.REMOVE_ITALIC_FORMATTING:
+            return f"{self.status} remove_italic_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.MAKE_STRIKETHROUGH_FORMATTING:
+            return f"{self.status} make_strikethrough_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.REMOVE_STRIKETHROUGH_FORMATTING:
+            return f"{self.status} remove_strikethrough_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.MAKE_UNDERLINE_FORMATTING:
+            return f"{self.status} make_underline_formatting({self._get_param_str()})"
+        elif self.action_type == ActionType.REMOVE_UNDERLINE_FORMATTING:
+            return f"{self.status} remove_underline_formatting({self._get_param_str()})"
         else:
             return f"Unknown action type: {self.action_type}"
-        
+
     def __repr__(self) -> str:
-        return self.__str__()        
+        return self.__str__()
 
 class Evaluation(BaseModel):
     decision: Decision
@@ -150,9 +279,13 @@ class Evaluation(BaseModel):
 class ActionPlan(BaseModel):
     find_actions: List[FindAction]
     edit_actions: List[EditAction]
+    format_actions: List[FormatAction]
 
     def __str__(self):
-        return "\n\t-" + "\n\t-".join([str(action) for action in self.find_actions]) + "\n\t-" + "\n\t-".join([str(action) for action in self.edit_actions])
+        find_action_str = "\n\t-" + "\n\t-".join([str(action) for action in self.find_actions])
+        edit_action_str = "\n\t-" + "\n\t-".join([str(action) for action in self.edit_actions])
+        format_action_str = "\n\t-" + "\n\t-".join([str(action) for action in self.format_actions])
+        return find_action_str + edit_action_str + format_action_str
 
 @dataclass
 class DialogTurn:
@@ -161,4 +294,3 @@ class DialogTurn:
     action_plan: ActionPlan
     function_calls: List[FunctionCall]
     decision: Decision
-
