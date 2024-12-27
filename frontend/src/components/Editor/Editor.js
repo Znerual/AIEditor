@@ -147,6 +147,10 @@ export const Editor = ({ documentId }) => {
                 
                 message = `Pre-running action plan, found the following variables ${JSON.stringify(data.positions)}`;
                 break;
+            case 'pre_run_actions':
+
+                message = `Pre-ran the action plan, found the following actions to be taken: ${data.actions}`;
+                break;
             case 'evaluating action plan':
                
                 message = `Evaluating action plan...`;
@@ -196,58 +200,249 @@ export const Editor = ({ documentId }) => {
         log('CHAT', 'Received chat answer:', response, suggested_edits);
         setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
         setSuggestedEdits(suggested_edits); // Assuming you still want to store them in state
-
+    
         const quill = quillRef.current.getEditor();
         const currentLength = quill.getText().length;
-        
+        let combinedEdits = new Delta();
+        let insertOffset = 0;
         if (suggested_edits && suggested_edits.length > 0) {
             suggested_edits.forEach(edit => {
-            log('CHAT', 'Processing edit:', edit);
-            log('CHAT', 'Edit id:', edit.id);
-            if (edit.name === 'insert_text') {
-                const position = Math.min(edit.arguments.position, currentLength);
-                const insertData = {
-                action_id: edit.id, // Or a unique ID from the backend
-                action_type: 'insert',
-                text: edit.arguments.text,
-                explanation: edit.arguments.explanation,
-                };
+                log('CHAT', 'Processing edit:', edit);
+                log('CHAT', 'Edit id:', edit.id);
+                if (edit.name === 'insert_text') {
+                    const position = Math.min(edit.arguments.position, currentLength) - insertOffset;
+                    const insertData = {
+                        action_id: edit.id, // Or a unique ID from the backend
+                        action_type: 'insert_text',
+                        text: edit.arguments.text,
+                        explanation: edit.arguments.explanation,
+                    };
+                    insertOffset += edit.arguments.text.length - 1;
+                    log('CHAT', 'Inserting suggestion with data:', insertData);
+                    const new_delta = new Delta().retain(position).insert("*", { "suggestion": insertData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quillRef.current.getEditor().updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'delete_text') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const deleteData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'delete_text',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': deleteData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'replace_text') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const replaceData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'replace_text',
+                        text: edit.arguments.new_text,
+                        explanation: edit.arguments.explanation,
+                    };
 
-                log('CHAT', 'Inserting suggestion with data:', insertData);
-                const new_delta = new Delta().retain(position).insert("*", {"suggestion" : insertData});
-                quillRef.current.getEditor().updateContents(new_delta, 'api');
-
-               
-            } else if (edit.name === 'delete_text') {
-                const start = Math.min(edit.arguments.start, currentLength);
-                const end = Math.min(edit.arguments.end, currentLength);
-                const deleteData = {
-                action_id: edit.id, // Unique ID for the suggestion
-                action_type: 'delete',
-                explanation: edit.arguments.explanation,
-                };
-
-                const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : deleteData});
-                quill.updateContents(new_delta, 'api');
-                
-            } else if (edit.name === 'replace_text') {
-                const start = Math.min(edit.arguments.start, currentLength);
-                const end = Math.min(edit.arguments.end, currentLength);
-                const replaceData = {
-                action_id: edit.id, // Unique ID for the suggestion
-                action_type: 'replace',
-                text: edit.arguments.new_text,
-                explanation: edit.arguments.explanation,
-                };
-               
-                const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : replaceData});
-                quill.updateContents(new_delta, 'api');
-               
-            }
-
-            suggestionIndicatorRef.current?.updateIndicators();
-
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': replaceData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+                } else if (edit.name === 'change_heading_level_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const changeHeadingLevelData = {
+                        action_id: edit.id,
+                        action_type: 'change_heading_level_formatting',
+                        level: edit.arguments.level,
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end-start, {'suggestion' : changeHeadingLevelData});
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+                } else if (edit.name === 'make_list_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const makeListData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'make_list_formatting',
+                        list_type: edit.arguments.list_type,
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': makeListData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'remove_list_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const removeListData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'remove_list_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': removeListData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'insert_code_block_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const insertCodeBlockData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'insert_code_block_formatting',
+                        language: edit.arguments.language,
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': insertCodeBlockData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'remove_code_block_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const removeCodeBlockData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'remove_code_block_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': removeCodeBlockData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'make_bold_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const makeBoldData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'make_bold_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': makeBoldData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'remove_bold_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const removeBoldData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'remove_bold_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': removeBoldData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'make_italic_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const makeItalicData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'make_italic_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': makeItalicData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'remove_italic_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const removeItalicData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'remove_italic_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': removeItalicData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'make_strikethrough_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const makeStrikethroughData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'make_strikethrough_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': makeStrikethroughData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'remove_strikethrough_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const removeStrikethroughData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'remove_strikethrough_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': removeStrikethroughData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'make_underline_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const makeUnderlineData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'make_underline_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': makeUnderlineData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+    
+                } else if (edit.name === 'remove_underline_formatting') {
+                    const start = Math.min(edit.arguments.start, currentLength) - insertOffset;
+                    const end = Math.min(edit.arguments.end, currentLength) - insertOffset;
+                    const removeUnderlineData = {
+                        action_id: edit.id, // Unique ID for the suggestion
+                        action_type: 'remove_underline_formatting',
+                        explanation: edit.arguments.explanation,
+                    };
+    
+                    insertOffset += edit.arguments.end - edit.arguments.start - 1;
+                    const new_delta = new Delta().retain(start).retain(end - start, { 'suggestion': removeUnderlineData });
+                    combinedEdits = combinedEdits.compose(new_delta);
+                    //quill.updateContents(new_delta, 'api');
+                } else {
+                    console.error('Invalid action type:', edit.action_type);
+                }
+    
+                suggestionIndicatorRef.current?.updateIndicators();
+    
             });
+            console.log("Combining edits:", combinedEdits);
+            quill.updateContents(combinedEdits, 'api');
         }
     }, []);
 
@@ -668,6 +863,64 @@ export const Editor = ({ documentId }) => {
         } else if (data.action_type === 'replace') {
             const new_delta = new Delta().retain(data.start).delete(data.end-data.start).insert(data.text);
             quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_list') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'list' : data.list_type});
+            quill.updateContents(new_delta, 'silent');
+            emit('client_apply_edit', {
+                documentId,
+                edit_id: data.action_id,
+                accepted: true,
+                action_type: data.action_type,
+                text: data.text,
+                start: data.start,
+                end: data.end,
+                list_type: data.list_type,
+            });
+            return
+        } else if (data.action_type === 'remove_list') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'list' : null});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'insert_code_block') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'code' : data.language});
+            quill.updateContents(new_delta, 'silent');
+            emit('client_apply_edit', {
+                documentId,
+                edit_id: data.action_id,
+                accepted: true,
+                action_type: data.action_type,
+                text: data.text,
+                start: data.start,
+                end: data.end,
+                language: data.language,
+            });
+            return
+        } else if (data.action_type === 'remove_code_block') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'code' : null});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_bold') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'bold' : true});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_bold') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'bold' : null});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_italic') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'italic' : true});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_italic') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'italic' : null});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_strikethrough') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'strike' : true});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_strikethrough') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'strike' : null});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_underline') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'underline' : true});
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_underline') {
+            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'underline' : null});
+            quill.updateContents(new_delta, 'silent');
         } else {
             log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
@@ -813,6 +1066,7 @@ export const Editor = ({ documentId }) => {
                         ref={quillRef}
                         value={editorContent}
                         onChange={handleEditorChange}
+                        onChangeSelection={(selection, s, e) => {console.log("[QuillEditor] Selection changed", selection)}}
                         modules={modules}
                     />
                     <SuggestionIndicator quillRef={quillRef} ref={suggestionIndicatorRef}  />
