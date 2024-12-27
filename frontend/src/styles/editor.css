@@ -85,11 +85,11 @@
 /* Target the suggestion blot within Quill editor (more specific) */
 .ql-editor .suggestion {
   cursor: pointer;
-  background-color: #ffebeb; /* Default background color */
+  background-color: #55cf88; /* Default background color */
 }
 
 .ql-editor .suggestion:hover {
-  background-color: #ffe0e0; /* Highlight on hover */
+  background-color: #9be5ba; /* Highlight on hover */
 }
 
 .suggestion-tooltip {
