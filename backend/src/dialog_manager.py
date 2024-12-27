@@ -69,6 +69,9 @@ class DialogManager:
         doc_start = time.time()
         document_delta = DocumentManager.get_document_content(document_id)
         document_html = delta_to_html(document_delta)
+        document_text = delta_to_string(document_delta)        
+
+
         logging.debug(f"Retrieved document content in {time.time() - doc_start:.3f}s")
         
         doc_timing = time.time() - doc_start
@@ -105,7 +108,14 @@ class DialogManager:
         plan_start = time.time()
         action_plan_prompt = self._build_action_plan_prompt(user_message, history, document_html, relevant_content_excerpts)
         logging.debug("Action plan prompt: " + action_plan_prompt)
-        
+        # print("HTML: " + document_html)
+        # print("\n\n")
+        # print("Text: " + document_text)
+        # print("\n\n")
+        # print("Prompt: " + action_plan_prompt)
+        # yield {"response" : "Debug Stop", "suggested_edits" : []}
+        # return
+
         try:
             action_plan: ActionPlan = self.planning_model.generate_content(action_plan_prompt)
         except Exception as e:
@@ -173,7 +183,7 @@ class DialogManager:
         logging.info("Action plan after cleaning: " + str(action_plan))
 
         position_validation_start = time.time()
-        document_text = delta_to_string(document_delta)
+        
         variable_positions, variable_position_mistakes, variable_position_problems = self._validate_find_text_actions(document_text, action_plan)
         
         logging.debug(f"Validated positions in {time.time() - position_validation_start:.3f}s")
