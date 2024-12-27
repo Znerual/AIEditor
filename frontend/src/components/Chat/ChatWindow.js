@@ -40,6 +40,44 @@ export const ChatWindow = ({ messages, setMessages, onSend }) => {
       const container = document.createElement('div');
       newWindow.document.body.appendChild(container);
       newWindow.document.title = 'Chat Window';
+
+      // Copy styles to new window
+      const styles = document.getElementsByTagName('style');
+      const links = document.getElementsByTagName('link');
+      
+      Array.from(styles).forEach(style => {
+        newWindow.document.head.appendChild(style.cloneNode(true));
+      });
+      
+      Array.from(links).forEach(link => {
+        if (link.rel === 'stylesheet') {
+          const newLink = newWindow.document.createElement('link');
+          newLink.rel = 'stylesheet';
+          newLink.href = link.href;
+          newWindow.document.head.appendChild(newLink);
+        }
+      });
+
+      // Add base styles
+      const baseStyles = newWindow.document.createElement('style');
+      baseStyles.textContent = `
+        body { 
+          margin: 0;
+          font-family: system, -apple-system, sans-serif;
+        }
+        .chat-section {
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+        .chat-messages {
+          flex: 1;
+          overflow-y: auto;
+          min-height: 0;
+        }
+      `;
+      newWindow.document.head.appendChild(baseStyles);
+
       setPopupWindow(newWindow);
       setContainerDiv(container);
       setIsPoppedOut(true);
