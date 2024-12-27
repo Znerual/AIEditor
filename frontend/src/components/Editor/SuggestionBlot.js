@@ -6,7 +6,7 @@ import { Quill } from 'react-quill';
 const Inline = Quill.import('blots/inline')
 class SuggestionBlot extends Inline {
     constructor(domNode, value) {
-        console.log('[SuggestionBlot] Creating suggestion blot with data:', value);
+        // console.log('[SuggestionBlot] Creating suggestion blot with data:', value);
         super(domNode, value);
         this.domNode.style.cursor = 'pointer';
         this.decisionButtons = null;
@@ -15,23 +15,29 @@ class SuggestionBlot extends Inline {
         this.text = value.text;
         this.explanation = value.explanation;
         this.action_id = value.action_id;
+        if (value.list_type) {
+            this.list_type = value.list_type;
+        }
+        if (value.language) {
+            this.language = value.language;
+        }
        
-        console.log('[SuggestionBlot] Constructed DOM node ', domNode);
+        // console.log('[SuggestionBlot] Constructed DOM node ', domNode);
     }
 
     static create(data) {
         let node = super.create();
 
-        console.log("Creating blot with ", data);
+        //console.log("Creating blot with ", data);
         node.setAttribute('class', 'suggestion'); // Add a class for styling
-        console.log('[SuggestionBlot] Setting attributes on DOM node ', node);
+        //console.log('[SuggestionBlot] Setting attributes on DOM node ', node);
         return node;
     }
 
     // Attach events after the blot is mounted
     attach() {
         super.attach();
-        console.log('[SuggestionBlot] Suggestion blot attached:', this.domNode);
+        //console.log('[SuggestionBlot] Suggestion blot attached:', this.domNode);
 
         this.domNode.addEventListener('click', (e) => {
             e.preventDefault();
@@ -72,12 +78,12 @@ class SuggestionBlot extends Inline {
         event.stopPropagation();
 
         if (this.decisionButtons) {
-            console.log('[SuggestionBlot] Hiding existing tooltip');
+            // console.log('[SuggestionBlot] Hiding existing tooltip');
             event.preventDefault();
             event.stopPropagation();
             this.hideDecisionButtons();
         } else {
-            console.log('[SuggestionBlot] Showing new tooltip');
+            // console.log('[SuggestionBlot] Showing new tooltip');
             event.preventDefault();
             event.stopPropagation();
             this.showDecisionButtons(event);
@@ -91,17 +97,62 @@ class SuggestionBlot extends Inline {
         // Get suggestion details
         const suggestionType = this.action_type;
         const suggestionText = this.text;
+        
+        
         let suggestionDetail = '';
+
+        // console.log("[SuggestionBlot] Showing description for suggestion: ", this.action_type);
         
         switch (suggestionType) {
-            case 'insert':
+            case 'insert_text':
                 suggestionDetail = `Insert: "${suggestionText}"`;
                 break;
-            case 'delete':
+            case 'delete_text':
                 suggestionDetail = `Delete`;
                 break;
-            case 'replace':
+            case 'replace_text':
                 suggestionDetail = `Replace with: "${suggestionText}"`;
+                break;
+            case 'change_heading_level_formatting':
+                suggestionDetail = `Change heading level to: ${this.level}`;
+                break;
+            case 'make_list_formatting':
+                const suggestionListType = this.list_type;
+                suggestionDetail = `Make list of type: ${suggestionListType}`;
+                break;
+            case 'remove_list_formatting':
+                suggestionDetail = `Remove list`;
+                break;
+            case 'insert_code_block_formatting':
+                const suggestionLanguage = this.language;
+                suggestionDetail = `Insert code block of language: ${suggestionLanguage}`;
+                break;
+            case 'remove_code_block_formatting':
+                suggestionDetail = `Remove code block`;
+                break;
+            case 'make_bold_formatting':
+                suggestionDetail = `Make text bold`;
+                break;
+            case 'remove_bold_formatting':
+                suggestionDetail = `Remove bold`;
+                break;
+            case 'make_italic_formatting':
+                suggestionDetail = `Make text italic`;
+                break;
+            case 'remove_italic_formatting':
+                suggestionDetail = `Remove italic`;
+                break;
+            case 'make_strikethrough_formatting':
+                suggestionDetail = `Make text strikethrough`;
+                break;
+            case 'remove_strikethrough_formatting':
+                suggestionDetail = `Remove strikethrough`;
+                break;
+            case 'make_underline_formatting':
+                suggestionDetail = `Make text underlined`;
+                break;
+            case 'remove_underline_formatting':
+                suggestionDetail = `Remove underline`;
                 break;
             default:
                 console.error('Invalid suggestion type:', suggestionType);
@@ -221,6 +272,12 @@ class SuggestionBlot extends Inline {
             'start' : index,
             'end' : index + length
         }
+        if (this.list_type) {
+            detail['list_type'] = this.list_type;
+        }
+        if (this.language) {
+            detail['language'] = this.language;
+        }
         console.log("[SuggestionBlot] Accept suggestion, data:", detail) 
         // Dispatch custom event
         this.domNode.dispatchEvent(new CustomEvent('accept-suggestion', {
@@ -239,6 +296,12 @@ class SuggestionBlot extends Inline {
             'text' : this.text,
             'start' : index,
             'end' : index + length
+        }
+        if (this.list_type) {
+            detail['list_type'] = this.list_type;
+        }
+        if (this.language) {
+            detail['language'] = this.language;
         }
         // Dispatch custom event
         this.domNode.dispatchEvent(new CustomEvent('reject-suggestion', {

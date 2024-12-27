@@ -10,48 +10,113 @@
     z-index: 10; /* Ensure it's above the editor content */
   }
   
-  .suggestion-indicator-track {
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
+.suggestion-indicator-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
   
-    .suggestion-indicator {
-        position: absolute;
-        width: 12px; /* Set width */
-        height: 12px; /* Set height to be equal to width */
-        border-radius: 50%; /* Make it a circle */
-        cursor: pointer;
-        transition: opacity 0.2s;
-    }
-    .suggestion-indicator.insert {
-        color: green;
-        background-color: green;
-    }
-
-    .suggestion-indicator.delete {
-        color: red;
-        background-color: red;
-    }
-
-    .suggestion-indicator.replace {
-        color: blue;
-        background-color: blue;
-    }
-  
-  .suggestion-indicator:hover {
-    opacity: 0.8;
-  }
-  
-  /* Tooltip styles (optional, for a floating tooltip) */
-  .suggestion-indicator-tooltip {
+.suggestion-indicator {
     position: absolute;
-    background-color: #444;
-    color: white;
-    border-radius: 5px;
-    padding: 5px 10px;
-    z-index: 1000;
-    font-family: sans-serif;
-    font-size: 14px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
+    width: 12px; /* Set width */
+    height: 12px; /* Set height to be equal to width */
+    border-radius: 50%; /* Make it a circle */
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.suggestion-indicator.insert_text {
+    color: green;
+    background-color: green;
+}
+
+.suggestion-indicator.delete_text {
+    color: red;
+    background-color: red;
+}
+
+.suggestion-indicator.replace_text {
+    color: blue;
+    background-color: blue;
+}
+
+.suggestion-indicator.change_heading_level_formatting {
+    color: darkviolet;
+    background-color: darkviolet;
+}
+
+.suggestion-indicator.make_list_formatting {
+    color: purple;
+    background-color: purple;
+}
+
+.suggestion-indicator.remove_list_formatting {
+    color: orange;
+    background-color: orange;
+}
+
+.suggestion-indicator.insert_code_block_formatting {
+    color: yellow;
+    background-color: yellow;
+}
+
+.suggestion-indicator.remove_code_block_formatting {
+    color: orange;
+    background-color: orange;
+}
+
+.suggestion-indicator.make_bold_formatting {
+    color: black;
+    background-color: black;
+}
+
+.suggestion-indicator.remove_bold_formatting {
+    color: orange;
+    background-color: orange;
+}
+
+.suggestion-indicator.make_italic_formatting {
+    color: black;
+    background-color: black;
+}
+
+.suggestion-indicator.remove_italic_formatting {
+    color: orange;
+    background-color: orange;
+}
+
+.suggestion-indicator.make_strikethrough_formatting {
+    color: black;
+    background-color: black;
+}
+
+.suggestion-indicator.remove_strikethrough_formatting {
+    color: orange;
+    background-color: orange;
+}
+
+.suggestion-indicator.make_underline_formatting {
+    color: black;
+    background-color: black;
+}
+
+.suggestion-indicator.remove_underline_formatting {
+    color: orange;
+    background-color: orange;
+}
+
+.suggestion-indicator:hover {
+  opacity: 0.8;
+}
+
+/* Tooltip styles (optional, for a floating tooltip) */
+.suggestion-indicator-tooltip {
+  position: absolute;
+  background-color: #444;
+  color: white;
+  border-radius: 5px;
+  padding: 5px 10px;
+  z-index: 1000;
+  font-family: sans-serif;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
