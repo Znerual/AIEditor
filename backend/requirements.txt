@@ -20,3 +20,4 @@ fuzzywuzzy
 anthropic
 pydantic
 python-Levenshtein
+Flask-Migrate

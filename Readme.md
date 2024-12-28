@@ -245,7 +245,13 @@ npm start
 
 ### Development Hacks
 
-#### Drop the Database
+#### Changing the Database
+
+There are two ways to change the database:
+1. They hard way: Drop the database and recreate it.
+2. The soft way: Create a migration file and run it.
+
+##### Drop the Database
 
 Drop and then recreate the database.
 
@@ -257,6 +263,22 @@ drop database eddy_db;
 create database eddy_db;
 \c eddy_db;
 CREATE EXTENSION vector;
+```
+
+##### Create a Migration File
+
+Since we use SQLAlchemy for database management, Alembic is used to manage database migrations. To create a new migration file, you need to have the Flask-Migrate extension installed.
+
+Then, run the following command to create a migration file:
+
+```bash
+flask db migrate -m "Add new column"
+```
+
+This will create a new migration file in the `migrations` directory. You can then apply the migration by running:
+
+```bash
+flask db upgrade
 ```
 
 ## Contribution
