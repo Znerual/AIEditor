@@ -1,7 +1,7 @@
 # /backend/src/dialog_types.py
 import enum
-from typing import Any, Dict, List, Optional, Union
-import typing
+from typing import Any, Dict, List, Optional, Union, TypedDict
+from urllib import response
 import uuid
 from dataclasses import dataclass, field
 from pydantic import BaseModel
@@ -57,6 +57,8 @@ ActionPlanFormat = {
     },
     "required": ["find_actions", "edit_actions", "format_actions"]
 }
+
+
 
 class ActionType(str, enum.Enum):
     INSERT_TEXT = "insert_text"
@@ -230,6 +232,15 @@ class FunctionCall:
             "arguments": self.arguments,
             "status": self.status
         }
+    
+    @classmethod
+    def from_dict(cls, data: Dict):
+        """Creates a FunctionCall object from a dictionary."""
+        return FunctionCall(
+            action_type=ActionType(data["name"]),
+            arguments=data["arguments"],
+            status=data["status"]
+        )
     def _get_param_str(self):
         return ", ".join([f"{key}={value}" for key, value in self.arguments.items()])
 
@@ -313,3 +324,50 @@ class DialogTurn:
             function_calls=[FunctionCall(**fc) for fc in data["function_calls"]],
             decision=Decision(data["decision"])
         )
+    
+@dataclass
+class DialogMessage:
+    sender: str
+    text: str
+
+    def to_dict(self):
+        return {
+            "sender": self.sender,
+            "text": self.text
+        }
+    
+@dataclass
+class IntermediaryStatus:
+    status: str
+    action_plan: ActionPlan
+    problems: Optional[List[Any]] = None
+    mistakes: Optional[List[str]] = None
+    timings: Optional[Dict[str, float]] = None
+    positions: Optional[Dict[str, int]] = None
+
+@dataclass
+class IntermediaryFixing:
+    status: str
+    problem: str
+    selection: int
+
+@dataclass
+class IntermediaryResult:
+    """
+    Represents an intermediary result yielded by a generator function.
+    Can either be a status update or a final response.
+    """
+    type: str  # 'status' | 'response' | 'error
+    message: Union[IntermediaryStatus, IntermediaryFixing, ActionPlan, Dict]
+
+class FinalResult:
+    status: str # 'error' | 'response'
+    response: str
+    suggested_edits: List[FunctionCall]
+    timing_info: Dict[str, float] = {}
+
+    def __init__(self, status: str, response: str, suggested_edits: List[FunctionCall], timing_info: Dict[str, float] = {}):
+        self.status = status
+        self.response = response
+        self.suggested_edits = suggested_edits
+        self.timing_info = timing_info
