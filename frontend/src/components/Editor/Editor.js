@@ -194,12 +194,9 @@ export const Editor = ({ documentId }) => {
         setChatMessages(prev => [...prev, { text: message, sender: 'system' }]);
     }, []);
 
-    const handleChatAnswerFinal = useCallback((data) => {
-        log('CHAT', 'Received chat answer:', data);
-        const { response, suggested_edits } = data;
-        log('CHAT', 'Received chat answer:', response, suggested_edits);
-        setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
-        setSuggestedEdits(suggested_edits); // Assuming you still want to store them in state
+
+    const showSuggestedEdits = useCallback((suggested_edits) => {
+        
     
         const quill = quillRef.current.getEditor();
         const currentLength = quill.getText().length;
@@ -444,6 +441,16 @@ export const Editor = ({ documentId }) => {
             console.log("Combining edits:", combinedEdits);
             quill.updateContents(combinedEdits, 'api');
         }
+
+    }, []);
+
+    const handleChatAnswerFinal = useCallback((data) => {
+        log('CHAT', 'Received chat answer:', data);
+        const { response, suggested_edits } = data;
+        log('CHAT', 'Received chat answer:', response, suggested_edits);
+        setChatMessages(prev => [...prev, { text: response, sender: 'server' }]);
+        setSuggestedEdits(suggested_edits);
+        showSuggestedEdits(suggested_edits);
     }, []);
 
     const handleAutocompletion = useCallback((event) => {
@@ -528,6 +535,8 @@ export const Editor = ({ documentId }) => {
                 log('CHAT_HISTORY', "Document ID mismatch");
             }
             setChatMessages(event.messages);
+            setSuggestedEdits(event.unresolved_edits);
+            showSuggestedEdits(event.unresolved_edits);
           
         }
     }, [documentId]);
@@ -865,18 +874,18 @@ export const Editor = ({ documentId }) => {
             return;
         }
         const quill = quillRef.current.getEditor();
-
-        if (data.action_type === 'insert') {
+        
+        if (data.action_type === 'insert_text') {
             const new_delta = new Delta().retain(data.start).delete(1).insert(data.text);
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'delete') {
-            const new_delta = new Delta().retain(data.start).delete(data.end-data.start);
+        } else if (data.action_type === 'delete_text') {
+            const new_delta = new Delta().retain(data.start).delete(data.end - data.start);
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'replace') {
-            const new_delta = new Delta().retain(data.start).delete(data.end-data.start).insert(data.text);
+        } else if (data.action_type === 'replace_text') {
+            const new_delta = new Delta().retain(data.start).delete(data.end - data.start).insert(data.text);
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'make_list') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'list' : data.list_type});
+        } else if (data.action_type === 'make_list_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'list': data.list_type, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
             emit('client_apply_edit', {
                 documentId,
@@ -888,12 +897,12 @@ export const Editor = ({ documentId }) => {
                 end: data.end,
                 list_type: data.list_type,
             });
-            return
-        } else if (data.action_type === 'remove_list') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'list' : null});
+            return;
+        } else if (data.action_type === 'remove_list_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'list': null, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'insert_code_block') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'code' : data.language});
+        } else if (data.action_type === 'insert_code_block_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'code': data.language, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
             emit('client_apply_edit', {
                 documentId,
@@ -905,37 +914,39 @@ export const Editor = ({ documentId }) => {
                 end: data.end,
                 language: data.language,
             });
-            return
-        } else if (data.action_type === 'remove_code_block') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'code' : null});
+            return;
+        } else if (data.action_type === 'remove_code_block_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'code': null, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'make_bold') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'bold' : true});
+        } else if (data.action_type === 'make_bold_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'bold': true, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'remove_bold') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'bold' : null});
+        } else if (data.action_type === 'remove_bold_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'bold': null, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'make_italic') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'italic' : true});
+        } else if (data.action_type === 'make_italic_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'italic': true, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'remove_italic') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'italic' : null});
+        } else if (data.action_type === 'remove_italic_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'italic': null, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'make_strikethrough') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'strike' : true});
+        } else if (data.action_type === 'make_strikethrough_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'strike': true, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'remove_strikethrough') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'strike' : null});
+        } else if (data.action_type === 'remove_strikethrough_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'strike': null, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'make_underline') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'underline' : true});
+        } else if (data.action_type === 'make_underline_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'underline': true, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'remove_underline') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'underline' : null});
+        } else if (data.action_type === 'remove_underline_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'underline': null, 'suggestion': null });
             quill.updateContents(new_delta, 'silent');
         } else {
+            console.error('Invalid suggestion type:', data.action_type);
             log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
+        
 
         suggestionIndicatorRef.current?.updateIndicators();
 
@@ -960,18 +971,77 @@ export const Editor = ({ documentId }) => {
         }
         const quill = quillRef.current.getEditor();
 
-        log('SUGGESTION_LOGIC', "Rejecting suggestion ", data.id);
+        log('SUGGESTION_LOGIC', "Rejecting suggestion ", data);
         log('SUGGESTION_LOGIC', "With data ", event);
-        if (data.action_type === 'insert') {
-            const new_delta = new Delta().retain(data.start).delete(1);
+        if (data.action_type === 'insert_text') {
+            const new_delta = new Delta().retain(data.start).delete(1)
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'delete') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'suggestion' : null});
+        } else if (data.action_type === 'delete_text') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
             quill.updateContents(new_delta, 'silent');
-        } else if (data.action_type === 'replace') {
-            const new_delta = new Delta().retain(data.start).retain(data.end-data.start, {'suggestion' : null});
+        } else if (data.action_type === 'replace_text') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_list_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+            emit('client_apply_edit', {
+                documentId,
+                edit_id: data.action_id,
+                accepted: false,
+                action_type: data.action_type,
+                text: data.text,
+                start: data.start,
+                end: data.end,
+                list_type: data.list_type,
+            });
+            return;
+        } else if (data.action_type === 'remove_list_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'insert_code_block_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+            emit('client_apply_edit', {
+                documentId,
+                edit_id: data.action_id,
+                accepted: false,
+                action_type: data.action_type,
+                text: data.text,
+                start: data.start,
+                end: data.end,
+                language: data.language,
+            });
+            return;
+        } else if (data.action_type === 'remove_code_block_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_bold_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_bold_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_italic_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_italic_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_strikethrough_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_strikethrough_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'make_underline_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            quill.updateContents(new_delta, 'silent');
+        } else if (data.action_type === 'remove_underline_formatting') {
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
             quill.updateContents(new_delta, 'silent');
         } else {
+            console.error('Invalid suggestion type:', data.action_type);
             log('SUGGESTION_LOGIC', 'Invalid suggestion type:', data.action_type);
         }
 

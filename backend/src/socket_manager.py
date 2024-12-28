@@ -179,7 +179,8 @@ class SocketManager:
                 history = DialogHistory.query.filter_by(document_id=document_id, user_id=user_id).first()
                 self.emit_event(WebSocketEvent('server_sent_chat_history', {
                     'documentId': document_id,
-                    'messages': [message.to_dict() for message in history.get_messages()]
+                    'messages': [message.to_dict() for message in history.get_messages()],
+                    'unresolved_edits' : [edit.to_dict() for edit in history.get_unresolved_edits()]
                 }))
                 
             except Exception as e:
