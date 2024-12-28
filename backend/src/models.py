@@ -10,7 +10,7 @@ import io
 import base64
 import json
 from delta import Delta
-from dialog_types import ActionPlan, DialogTurn, DialogMessage, FunctionCall
+from dialog_types import ActionPlan, Decision, DialogTurn, DialogMessage, FunctionCall
 db = SQLAlchemy()
 
 
@@ -231,3 +231,19 @@ class DialogHistory(db.Model):
             messages.append(DialogMessage(sender="system", text=turn["decision"] if "decision" in turn else ""))
 
         return messages
+    
+    def get_unresolved_edits(self) -> List[FunctionCall]:
+        """Retrieves the unresolved edits for the current document."""
+        edits = []
+        for turn in self.turns:
+            dialog_turn = DialogTurn.from_dict(turn)
+            if dialog_turn.decision == Decision.REJECT:
+                continue
+
+            for function_call in dialog_turn.function_calls:
+                if function_call.status == "rejected" or function_call.status == "accepted":
+                    continue
+                
+                edits.append(function_call)
+            
+        return edits
