@@ -4,7 +4,7 @@ import logging
 from utils import delta_to_string, delta_to_html
 from document_manager import DocumentManager
 from embedding_manager import EmbeddingManager
-from models import FileContent, Document
+from models import db, FileContent, Document, DialogHistory
 import time
 from typing import List, Dict, Optional, Any, Tuple, Union
 from llm_manager import LLMManager
@@ -34,11 +34,15 @@ class DialogManager:
         self.evaluation_model = llm_manager.create_llm("fast", "google", response_format_model=Evaluation, model_name="evaluation")
        
         self._embedding_manager = EmbeddingManager()
-        self.dialog_history: Dict[int, List[DialogTurn]] = {}  # User ID to dialog history
+        # self.dialog_history: Dict[int, List[DialogTurn]] = {}  # User ID to dialog history
 
-    def start_new_dialog(self, user_id: int):
+    def start_new_dialog(self, user_id: int, document_id: str):
         """Starts a new dialog for the given user"""
-        self.dialog_history[user_id] = []
+        # self.dialog_history[user_id] = []
+        new_dialog = DialogHistory(user_id=user_id, document_id=document_id, turns=[])
+        db.session.add(new_dialog)
+        db.session.commit()
+        return new_dialog
 
     def get_response_stream(self, user_id: int, user_message: str, document_id: str, current_content_selection: Optional[List[Dict]] = None):
         """
@@ -59,7 +63,13 @@ class DialogManager:
 
         # Retrieve dialog history
         history_start = time.time()
-        history = self.dialog_history.get(user_id, [])
+        # history = self.dialog_history.get(user_id, [])
+        history_entry = DialogHistory.query.filter_by(user_id=user_id, document_id=document_id).first()
+        if not history_entry:
+            history_entry = self.start_new_dialog(user_id, document_id)
+           
+
+        history = history_entry.get_turns()
         logging.debug(f"Retrieved dialog history in {time.time() - history_start:.3f}s")
         history_timing = time.time() - history_start
         # Prepare relevant content based on selection using EmbeddingManager
@@ -70,7 +80,6 @@ class DialogManager:
         document_delta = DocumentManager.get_document_content(document_id)
         document_html = delta_to_html(document_delta)
         document_text = delta_to_string(document_delta)        
-
 
         logging.debug(f"Retrieved document content in {time.time() - doc_start:.3f}s")
         
@@ -121,13 +130,13 @@ class DialogManager:
         except Exception as e:
             logging.error(f"Error generating action plan: {e}")
             yield {"response": "Failed to generate action plan due to an error.", "suggested_edits": []}
-            history.append(DialogTurn(
+            history_entry.add_turn(DialogTurn(
             user_message, 
             ActionPlan(find_actions=[], edit_actions=[], format_actions=[]),
             [],
             Decision.REJECT
             ))
-            self.dialog_history[user_id] = history
+            db.session.commit()
             return
             
         logging.debug(f"Generated action plan in {time.time() - plan_start:.3f}s: {str(action_plan)}")
@@ -165,13 +174,13 @@ class DialogManager:
                 logging.info(f"Could not fix variable naming problems after {fix_counter} iterations and {time.time() - fix_start:.3f}s")
                 yield {"response": {"status": "Fail to generate action_plan because of naming problems", 
                         "problems": variable_naming_problems}}
-                history.append(DialogTurn(
+                history_entry.add_turn(DialogTurn(
                 user_message, 
                 ActionPlan(find_actions=[], edit_actions=[], format_actions=[]),
                 [],
                 Decision.REJECT
                 ))
-                self.dialog_history[user_id] = history
+                db.session.commit()
                 return
                 
 
@@ -205,13 +214,13 @@ class DialogManager:
                 if action_plan is None:
                     logging.error(f"Failed to fix find_text action problems")
                     yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
-                    history.append(DialogTurn(
+                    history_entry.add_turn(DialogTurn(
                         user_message, 
                         ActionPlan(find_actions=[], edit_actions=[], format_actions=[]),
                         [],
                         Decision.REJECT
                     ))
-                    self.dialog_history[user_id] = history
+                    db.session.commit()
                     return
         
                 variable_positions, variable_position_mistakes, variable_position_problems = self._validate_find_text_actions(document_text, action_plan)
@@ -227,13 +236,13 @@ class DialogManager:
                 logging.error(f"Failed to fix position mistakes after {fix_counter} iterations and {mistakes_fix_timing:.3f}s")
                 yield {"response": {"status": "Failed to generate action plan due to find_text action mistakes", 
                     "problems": variable_position_mistakes}}
-                history.append(DialogTurn(
+                history_entry.add_turn(DialogTurn(
                     user_message, 
                     action_plan,
                     [],
                     Decision.REJECT
                 ))
-                self.dialog_history[user_id] = history
+                db.session.commit()
                 return
 
         if variable_position_problems:
@@ -257,13 +266,13 @@ class DialogManager:
                 except Exception as e:
                     logging.error(f"Error generating fix for non-exclusive matches: {e}")
                     yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
-                    history.append(DialogTurn(
+                    history_entry.add_turn(DialogTurn(
                         user_message, 
                         action_plan,
                         [],
                         Decision.REJECT
                     ))
-                    self.dialog_history[user_id] = history
+                    db.session.commit()
                     return
                     
 
@@ -272,13 +281,13 @@ class DialogManager:
                 if selection.index == -1:
                     logging.info(f"Model response for fixing non-exclusive matches in action plan: No match found")
                     yield {"response": "Failed to generate action plan due to find_text action problems.", "suggested_edits": []}
-                    history.append(DialogTurn(
+                    history_entry.add_turn(DialogTurn(
                         user_message, 
                         action_plan,
                         [],
                         Decision.REJECT
                     ))
-                    self.dialog_history[user_id] = history
+                    db.session.commit()
                     return
 
                 yield {"intermediary": {"status": "Fixing match ambiguities", 
@@ -294,7 +303,6 @@ class DialogManager:
         extracted_variables_positions_timing = time.time() - validation_start
         logging.debug(f"Extracted variables and positions in {extracted_variables_positions_timing:.3f}s: {variable_positions}")
         yield {"intermediary": {"status": "Found text position, pre_running actions", "positions": variable_positions}}
-
 
         # Fix invalid formatting actions hidded as edit actions
         action_plan = self._fix_action_plan_formatting_actions(action_plan)
@@ -312,13 +320,13 @@ class DialogManager:
         except Exception as e:
             logging.error(f"Error generating evaluation: {e}")
             yield {"response": "Failed to generate action plan due to an error.", "suggested_edits": []}
-            history.append(DialogTurn(
+            history_entry.add_turn(DialogTurn(
                 user_message, 
                 action_plan,
                 actions,
                 Decision.REJECT
             ))
-            self.dialog_history[user_id] = history
+            db.session.commit()
             return
         evaluation_timing = time.time() - eval_start
         logging.debug(f"Evaluation completed in {evaluation_timing:.3f}s: {evaluation}")
@@ -334,13 +342,13 @@ class DialogManager:
 
         # Update dialog history
         history_update_start = time.time()
-        history.append(DialogTurn(
+        history_entry.add_turn(DialogTurn(
             user_message, 
             action_plan,
             actions,
             evaluation.decision
         ))
-        self.dialog_history[user_id] = history
+        db.session.commit()
         logging.debug(f"Updated dialog history in {time.time() - history_update_start:.3f}s")
 
         total_time = time.time() - start_time
@@ -673,7 +681,6 @@ Important:
         prompt += "- All variable names are unique and used correctly.\n"
         prompt += "- The format of the generated action plan should match the format of the current action plan, it should be a json array of actions\n"
         prompt += "If you cannot fix the problems, return an empty list.\n\n"
-
         prompt += "## Fixed Action Plan (JSON):\n"
 
         # Query the model
@@ -694,10 +701,10 @@ Important:
         _,find_text_mistakes, _ = self._validate_find_text_actions(document_text, fixed_action_plan)
         if find_text_mistakes:
             logging.error(f"Fixed action plan still has find_text problems: {find_text_mistakes}")
-           
+        
 
         return fixed_action_plan
-    
+
     def _validate_find_text_actions(self, document_text: str, action_plan: ActionPlan) -> Tuple[Dict[str, Union[int, List[int]]], List[str], List[Tuple[str, str]]]:
         """
         Validates find_text actions by ensuring the text can be found in the document.
@@ -765,8 +772,8 @@ Important:
                 for match in exact_matches:
                     start_pos = match.start()
                     positions[action.find_action_variable_name].append(start_pos)
-                  
-                   
+                
+                
                 logging.info(f"Found exact matches: {exact_matches}")
 
             if not positions[action.find_action_variable_name]:
@@ -779,7 +786,7 @@ Important:
                 positions[action.find_action_variable_name] = positions[action.find_action_variable_name][0]
 
         return positions, mistakes, problems
-    
+
     def _fix_action_plan_formatting_actions(self, action_plan: ActionPlan) -> ActionPlan:
         """
         Fixes formatting actions that were mistakenly generated as edit actions.
@@ -1032,7 +1039,7 @@ Important:
                 ))
 
         return results
-    
+
     def _build_evaluation_prompt(self, user_message: str, history: List[DialogTurn], document_text: str, actions: List[FunctionCall]) -> str:
         prompt = "## Dialog History:\n"
         # Add conversation history with past actions
@@ -1045,58 +1052,57 @@ Important:
         
         # Add current context
         proposed_actions = '\n  - '.join([str(action) for action in actions])
-        prompt += f"""## Current User Message:
+        prompt += f"""# Current User Message:
 {user_message}
-
-## Current Document:
+# Current Document:
 {document_text}
 
-## Proposed Actions:
-- {proposed_actions}
+# Proposed Actions:
+{proposed_actions}
 
-## Task:
+# Task:
 Evaluate whether the proposed actions should be applied. Consider the following criteria:
 
-1. Alignment with User Request:
+- Alignment with User Request:
 - Do the actions work towards fulfilling the user's request?
 - Partial fulfillment is acceptable if the actions are correct
 - Not good formatting actions alone should not be a reason for a rejection
 - Actions must not contradict the user's intent
-
-2. Safety and Consistency:
+- Safety and Consistency:
 - Actions should not result in unintended document changes
 - Each edit should have a clear purpose related to the request
 - Position variables should be properly referenced
 
-3. Acceptance Criteria:
-- ACCEPT if actions are:
-    * Aligned with user's request (even if partial)
-    * Safe and well-defined
-    * Properly structured with find operations before edits
+## Acceptance Criteria:
+### ACCEPT if actions are:
+-     Aligned with user's request (even if partial)
+-     Safe and well-defined
+-     Properly structured with find operations before edits
+### REJECT if actions:
+-     Contradict user's intent
+-     Could cause unintended changes
+-     Are completely unrelated to the request
 
-- REJECT if actions:
-    * Contradict user's intent
-    * Could cause unintended changes
-    * Are completely unrelated to the request
-
-## Evaluation Response Format:"""
+# Evaluation Response Format:"""
+              
         prompt += """
 Return a JSON object with:
 {
-    "decision": "apply" or "reject",
-    "explanation": "Brief explanation of the decision, highlighting key factors"
-}
+"decision": "apply" or "reject",
+"explanation": "Brief explanation of the decision, highlighting key factors"
+}"""
 
-## Evaluation:"""
-        
         return prompt
-
+    
     def apply_edit(self, user_id: int, document_id: int, function_call_id: str, current_start: int, current_end: int, accepted: bool):
         """Applies or rejects a suggested edit."""
         logging.info(f"Applying edit for user {user_id}, document {document_id}, function_call_id {function_call_id}, accepted: {accepted}")
-        history: List[DialogTurn] = self.dialog_history.get(user_id, [])
-        if not history:
+        # history: List[DialogTurn] = self.dialog_history.get(user_id, [])
+        history_entry = DialogHistory.query.filter_by(user_id=user_id).first()
+        if not history_entry:
             raise ValueError("No dialog history found for user.")
+        
+        history = history_entry.turns
 
         logger.debug(f"Current dialog history: {history}")
         # Find the edit in the history (in this case a function call)
@@ -1133,10 +1139,12 @@ Return a JSON object with:
         logging.debug(f"Updated dialog history: {history}")
 
         # Update the dialog history
-        self.dialog_history[user_id] = history
+        # self.dialog_history[user_id] = history
+        history_entry.turns = history
+        db.session.commit()
 
         return delta
-    
+
     def _execute_function_calls(self, current_start: int, current_end: int, document_id: str, function_call: FunctionCall) -> Delta:
         """Executes a single function call, updates all DialogTurn instances following the current one and returns the resulting delta.
 

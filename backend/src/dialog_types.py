@@ -58,7 +58,7 @@ ActionPlanFormat = {
     "required": ["find_actions", "edit_actions", "format_actions"]
 }
 
-class ActionType(enum.Enum):
+class ActionType(str, enum.Enum):
     INSERT_TEXT = "insert_text"
     DELETE_TEXT = "delete_text"
     REPLACE_TEXT = "replace_text"
@@ -85,7 +85,7 @@ class ActionType(enum.Enum):
     def __str__(self) -> str:
         return self.value
 
-class EditActionType(enum.Enum):
+class EditActionType(str, enum.Enum):
     INSERT_TEXT = "insert_text"
     DELETE_TEXT = "delete_text"
     REPLACE_TEXT = "replace_text"
@@ -98,7 +98,7 @@ class EditActionType(enum.Enum):
     def __str__(self) -> str:
         return self.value
 
-class FormatActionType(enum.Enum):
+class FormatActionType(str, enum.Enum):
     CHANGE_HEADING_LEVEL_FORMATTING = "change_heading_level_formatting"
     MAKE_LIST_FORMATTING = "make_list_formatting"
     REMOVE_LIST_FORMATTING = "remove_list_formatting"
@@ -121,7 +121,7 @@ class FormatActionType(enum.Enum):
     def __str__(self) -> str:
         return self.value
 
-class Decision(enum.Enum):
+class Decision(str, enum.Enum):
     APPLY = "apply"
     REJECT = "reject"
 
@@ -287,10 +287,29 @@ class ActionPlan(BaseModel):
         format_action_str = "\n\t-" + "\n\t-".join([str(action) for action in self.format_actions])
         return find_action_str + edit_action_str + format_action_str
 
-@dataclass
 class DialogTurn:
     """Stores the context of a single dialog turn"""
-    user_message: str
-    action_plan: ActionPlan
-    function_calls: List[FunctionCall]
-    decision: Decision
+    def __init__(self, user_message: str, action_plan: ActionPlan, function_calls: List[FunctionCall], decision: Decision):
+        self.user_message = user_message
+        self.action_plan = action_plan
+        self.function_calls = function_calls
+        self.decision = decision
+
+    def to_dict(self):
+        """Converts the DialogTurn object to a dictionary for serialization."""
+        return {
+            "user_message": self.user_message,
+            "action_plan": self.action_plan.model_dump() if self.action_plan else ActionPlan(find_actions=[], edit_actions=[], format_actions=[]).model_dump(),
+            "function_calls": [fc.to_dict() for fc in self.function_calls],
+            "decision": str(self.decision)
+        }
+
+    @staticmethod
+    def from_dict(data: Dict):
+        """Creates a DialogTurn object from a dictionary."""
+        return DialogTurn(
+            user_message=data["user_message"],
+            action_plan=ActionPlan(**data["action_plan"]) if data["action_plan"] else ActionPlan(find_actions=[], edit_actions=[], format_actions=[]),
+            function_calls=[FunctionCall(**fc) for fc in data["function_calls"]],
+            decision=Decision(data["decision"])
+        )

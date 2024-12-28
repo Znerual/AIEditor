@@ -1,4 +1,5 @@
-# src/models.py
+# src/backend/models.py
+from typing import List, Optional
 from flask_sqlalchemy import SQLAlchemy
 from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ import io
 import base64
 import json
 from delta import Delta
+from dialog_types import DialogTurn
 db = SQLAlchemy()
 
 
@@ -189,3 +191,26 @@ class Thumbnail(db.Model):
         with io.BytesIO() as output:
             img.save(output, format="WEBP")
             self.image_data = output.getvalue()
+
+class DialogHistory(db.Model):
+    __tablename__ = 'dialog_histories'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    document_id = db.Column(db.String(36), db.ForeignKey('documents.id'), nullable=True)
+    turns = db.Column(db.JSON, nullable=False)
+
+    def __init__(self, user_id: int, document_id: str, turns: Optional[List[DialogTurn]] = None):
+        self.user_id = user_id
+        self.document_id = document_id
+        self.turns = [turn.to_dict() for turn in turns] if turns else []
+
+    def add_turn(self, turn: DialogTurn):
+        """Adds a new turn to the dialog history."""
+        if not self.turns:
+            self.turns = []
+        self.turns.append(turn.to_dict())
+
+    def get_turns(self) -> List[DialogTurn]:
+        """Retrieves the dialog turns as a list of DialogTurn objects."""
+        return [DialogTurn.from_dict(turn) for turn in (self.turns or [])]
