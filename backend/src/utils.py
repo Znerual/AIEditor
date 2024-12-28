@@ -17,8 +17,6 @@ def delta_to_string(delta: Delta) -> str:
     if isinstance(delta, list):
         delta = Delta(delta)
 
- 
-
     composed_delta = Delta()  # Start with an empty Delta
     for op in delta.ops:
         composed_delta = Delta([op]).compose(composed_delta)  
@@ -29,7 +27,7 @@ def delta_to_string(delta: Delta) -> str:
     try:
         return composed_delta.document()
     except Exception as e:
-        logger.warning(f"Error converting delta to string: {e}")
+        logger.warning(f"Error converting delta to string: {e}\n{composed_delta}")
         text = ""
         for op in delta.ops:
             #print(op)
