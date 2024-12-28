@@ -1,4 +1,5 @@
 # src/socket_manager.py
+from multiprocessing import Value
 from os import access
 from flask import session
 from flask_socketio import SocketIO, join_room, leave_room
@@ -11,7 +12,7 @@ from structure_manager import StructureManager
 from llm_manager import LLMManager
 from auth import Auth
 from functools import partial
-from models import User, Document, DocumentEditAccess,DocumentReadAccess
+from models import User, Document, DocumentEditAccess,DocumentReadAccess, DialogHistory
 from concurrent.futures import ThreadPoolExecutor
 from models import Document, db
 import logging
@@ -20,6 +21,7 @@ import uuid
 from utils import string_to_delta
 import threading
 from config import Config
+from dialog_types import IntermediaryResult, IntermediaryStatus, FinalResult
 
 logger = logging.getLogger('eddy_logger')
 
@@ -124,8 +126,8 @@ class SocketManager:
                 
                 document = Document.query.get_or_404(document_id)
                 
-                access_rights = None
                 # get the access rights for the file
+                access_rights = None
                 if int(user_id) == int(document.user_id):
                     access_rights = 'owner'
                 else:
@@ -164,12 +166,20 @@ class SocketManager:
                     room=document_id
                 )
 
+                # send the document
                 content = DocumentManager.get_document_content(document)
                 self.emit_event(WebSocketEvent('server_sent_document_content', {
                     'documentId': document_id,
                     'title': document.title,
                     'content': content.ops,
                     'access_rights': access_rights,
+                }))
+
+                # load the chat history and send it to the client
+                history = DialogHistory.query.filter_by(document_id=document_id, user_id=user_id).first()
+                self.emit_event(WebSocketEvent('server_sent_chat_history', {
+                    'documentId': document_id,
+                    'messages': [message.to_dict() for message in history.get_messages()]
                 }))
                 
             except Exception as e:
@@ -411,23 +421,47 @@ class SocketManager:
 
             #def stream_response(user_id, msg, document_id, current_content_selection, emit_event):
             for response_data in self._dialog_manager.get_response_stream(user_id, msg['text'], document_id, self.current_content_selection):
-                # Emit intermediary responses
-                self.emit_event(WebSocketEvent("server_chat_answer_intermediary", response_data.get("intermediary", {})))
+                
+                # convert to serializable format
+                if isinstance(response_data, IntermediaryResult):
+                    if isinstance(response_data.message, IntermediaryStatus):
+                        response_dict = {
+                            "status" : response_data.message.status,
+                            "action_plan" : str(response_data.message.action_plan),
+                            "problems" : response_data.message.problems,
+                            "mistakes" : response_data.message.mistakes,
+                            "timings" : response_data.message.timings,
+                            "positions" : response_data.message.positions
+                        }
+                        # Emit intermediary responses
+                        self.emit_event(WebSocketEvent(
+                            "server_chat_answer_intermediary", 
+                            response_dict))
+                    else:
+                        raise ValueError(f"Unknown intermediary result type: {type(response_data.message)}")
+                
+                elif isinstance(response_data, FinalResult):
+                    # Emit final response with suggested edits
+                    
+                    response_dict = {
+                        "status" : response_data.status,
+                        "response" : response_data.response,
+                        "suggested_edits" : [action.to_dict() for action in response_data.suggested_edits],
+                        "timing_info" : response_data.timing_info
+                    }
 
-            # Emit final response with suggested edits
-            if session['access_rights'] in ["owner", "edit"]:
-                suggested_edits = response_data.get("suggested_edits", [])
-            else:
-                suggested_edits = []
-            logger.info(f"Final Response data: {response_data['response']}, Suggested edits: {suggested_edits}")
+                    if not session['access_rights'] in ["owner", "edit"]:
+                        response_dict["suggested_edits"] = []
+                  
+                    logger.info(f"Final Response data: {response_dict}")
 
-            self.emit_event(WebSocketEvent("server_chat_answer_final", {
-                "response": response_data.get("response", ""),
-                "suggested_edits": suggested_edits,
-            }))
-            
-            # Start the response generation in a separate thread to avoid blocking
-            #threading.Thread(target=stream_response, args=(user_id, msg, document_id, self.current_content_selection, self.emit_event)).start()
+                    self.emit_event(WebSocketEvent(
+                        "server_chat_answer_final", 
+                        response_dict
+                    ))
+                else:
+                    raise ValueError(f"Unknown response data type: {type(response_data)}")
+                
 
         @self._socketio.on('client_apply_edit')
         @Auth.socket_auth_required(emit_event=self.emit_event)

@@ -521,6 +521,17 @@ export const Editor = ({ documentId }) => {
         }
     }, []);
 
+    const handleGetChatHistory = useCallback((event) => {
+        log('CHAT_HISTORY', "Received chat history", event); // event has document_id and content fields
+        if (event && event.messages) {
+            if (event.documentId != documentId) {
+                log('CHAT_HISTORY', "Document ID mismatch");
+            }
+            setChatMessages(event.messages);
+          
+        }
+    }, [documentId]);
+
     const handleGetStructure = useCallback((event) => {
         log('STRUCTURE', "Received structure", event); // event has document_id and content fields
         if (event && event.content) {
@@ -760,6 +771,7 @@ export const Editor = ({ documentId }) => {
         // Single User Events
         server_authentication_failed: handleAuthenticationFailed,
         server_sent_document_content: handleGetContent,
+        server_sent_chat_history: handleGetChatHistory,
         server_sent_new_structure: handleGetStructure,
         server_autocompletion_suggestions: handleAutocompletion,
         server_document_title_generated: handleDocumentTitleGenerated,

@@ -1,4 +1,5 @@
 # src/backend/models.py
+from pyexpat.errors import messages
 from typing import List, Optional
 from flask_sqlalchemy import SQLAlchemy
 from pgvector.sqlalchemy import Vector
@@ -9,7 +10,7 @@ import io
 import base64
 import json
 from delta import Delta
-from dialog_types import DialogTurn
+from dialog_types import ActionPlan, DialogTurn, DialogMessage, FunctionCall
 db = SQLAlchemy()
 
 
@@ -205,12 +206,28 @@ class DialogHistory(db.Model):
         self.document_id = document_id
         self.turns = [turn.to_dict() for turn in turns] if turns else []
 
-    def add_turn(self, turn: DialogTurn):
-        """Adds a new turn to the dialog history."""
-        if not self.turns:
-            self.turns = []
-        self.turns.append(turn.to_dict())
 
     def get_turns(self) -> List[DialogTurn]:
         """Retrieves the dialog turns as a list of DialogTurn objects."""
         return [DialogTurn.from_dict(turn) for turn in (self.turns or [])]
+    
+    def get_messages(self) -> List[DialogMessage]:
+        """Retrieves the dialog messages as a list of DialogMessage objects."""
+        messages = []
+
+        print(self.turns)
+
+        for turn in self.turns:
+            if "action_plan" in turn:
+                if "find_actions" in turn["action_plan"] and "edit_actions" in turn["action_plan"] and "format_actions" in turn["action_plan"]:
+                    action_plan = ActionPlan(find_actions=turn["action_plan"]["find_actions"], edit_actions=turn["action_plan"]["edit_actions"], format_actions=turn["action_plan"]["format_actions"])
+                else:
+                    action_plan = ActionPlan(find_actions=[], edit_actions=[], format_actions=[])
+
+            function_calls = "-\n".join([str(FunctionCall.from_dict(call)) for call in (turn["function_calls"] or [])])
+            messages.append(DialogMessage(sender="user", text=turn["user_message"]))
+            messages.append(DialogMessage(sender="system", text=str(action_plan)))
+            messages.append(DialogMessage(sender="system", text=function_calls))
+            messages.append(DialogMessage(sender="system", text=turn["decision"] if "decision" in turn else ""))
+
+        return messages
