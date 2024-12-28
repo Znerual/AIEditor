@@ -1,5 +1,5 @@
 class Config:
-    DEBUG = True
+    DEBUG = False
     SHOW_EMIT_SUCCESS = False
     # Allow connections from React development server
     CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3000/", "*"] # http://localhost:3000
