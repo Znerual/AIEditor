@@ -321,7 +321,7 @@ class DialogTurn:
         return DialogTurn(
             user_message=data["user_message"],
             action_plan=ActionPlan(**data["action_plan"]) if data["action_plan"] else ActionPlan(find_actions=[], edit_actions=[], format_actions=[]),
-            function_calls=[FunctionCall(**fc) for fc in data["function_calls"]],
+            function_calls=[FunctionCall.from_dict(fc) for fc in data["function_calls"]],
             decision=Decision(data["decision"])
         )
     
