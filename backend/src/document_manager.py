@@ -5,11 +5,11 @@ from utils import delta_to_html, delta_to_string
 
 class DocumentManager:
     @staticmethod
-    def create_document(user_id: str, document_id: Optional[int] = None) -> Document:
-        if document_id:
-            document = Document.query.filter_by(id=document_id).first()
-            if document:
-                raise ValueError(f"Document with ID {document_id} already exists")
+    def create_document(user_id: str, document_id: str) -> Document:
+        
+        document = Document.query.filter_by(id=document_id).first()
+        if document:
+            raise ValueError(f"Document with ID {document_id} already exists")
         
             
         user = User.query.filter_by(id=user_id).first()
