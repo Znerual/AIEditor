@@ -1,10 +1,10 @@
 import { useCallback, useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Button } from '../ui/button';
-import { Send, X } from 'lucide-react';
+import { Send, X, Trash2 } from 'lucide-react';
 import '../../styles/chatSection.css';
 
-export const ChatWindow = ({ messages, setMessages, onSend }) => {
+export const ChatWindow = ({ messages, setMessages, onSend, onDeleteChatHistory }) => {
   const [inputText, setInputText] = useState('');
   const [isPoppedOut, setIsPoppedOut] = useState(false);
   const [popupWindow, setPopupWindow] = useState(null);
@@ -32,6 +32,12 @@ export const ChatWindow = ({ messages, setMessages, onSend }) => {
     setMessages(prevMessages =>
       prevMessages.filter((_, index) => index !== indexToDelete)
     );
+  };
+
+  const handleDeleteChatHistory = () => {
+    setMessages([]);
+    onDeleteChatHistory();
+
   };
 
   const handlePopOut = () => {
@@ -106,6 +112,9 @@ export const ChatWindow = ({ messages, setMessages, onSend }) => {
     <div className="chat-section">
         <div className="chat-header-container">
             <h2 className="chat-header-title">Chat</h2>
+            <Button onClick={handleDeleteChatHistory} className="chat-header-button">
+            <Trash2 className="h-4 w-4" />
+            </Button>
             {!isPoppedOut && (
                 <Button onClick={handlePopOut} className="chat-header-button">
                 Pop Out
