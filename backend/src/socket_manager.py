@@ -476,13 +476,17 @@ class SocketManager:
             end = data.get("end")
 
             if not accepted:
+                logger.info(f"User {user_id} rejected edit with id {edit_id}")
+                delta = self._dialog_manager.apply_edit(user_id, document_id, edit_id, start, end, accepted)
                 return
             
             if not session['access_rights'] in ["owner", "edit"]:
+                logger.warning(f"User {user_id} tried to apply edit without access rights")
                 self.emit_event(WebSocketEvent('error', {'message' : 'No rights to edit document'}))
                 return
 
             if document_id is None or edit_id is None or accepted is None:
+                logger.warning(f"User {user_id} tried to apply edit with invalid data")
                 self.emit_event(WebSocketEvent("server_error", {"message": "Invalid edit request"}))
                 return
 

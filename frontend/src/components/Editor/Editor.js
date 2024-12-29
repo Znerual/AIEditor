@@ -1017,7 +1017,7 @@ export const Editor = ({ documentId }) => {
             const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
             quill.updateContents(new_delta, 'silent');
         } else if (data.action_type === 'make_bold_formatting') {
-            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
+            const new_delta = new Delta().retain(data.start).retain(data.end - data.start, {'suggestion' : null} );
             quill.updateContents(new_delta, 'silent');
         } else if (data.action_type === 'remove_bold_formatting') {
             const new_delta = new Delta().retain(data.start).retain(data.end - data.start, { 'suggestion' : null });
@@ -1049,7 +1049,7 @@ export const Editor = ({ documentId }) => {
         
         emit('client_apply_edit', {
             documentId,
-            edit_id: data.id,
+            edit_id: data.action_id,
             accepted: false,
             action_type: data.action_type,
             text: data.text,

@@ -30,5 +30,5 @@ class DialogHistoryManager:
 
     def update_dialog_history(self, history_entry: DialogHistory, history: List[DialogTurn]):
         """Updates the dialog history."""
-        history_entry.turns = history
+        history_entry.turns = [turn.to_dict() for turn in history]
         db.session.commit()

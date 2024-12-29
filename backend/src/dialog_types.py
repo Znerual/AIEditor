@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from pydantic import BaseModel
 
+
 ActionPlanFormat = {
     "type": "object",
     "properties": {
@@ -214,15 +215,20 @@ class FormatAction(BaseModel):
         else:
             return f"Unknown action type: {self.action_type}"
 
-@dataclass
 class FunctionCall:
     """Represents a function call with its arguments and status"""
     action_type: ActionType
     arguments: Dict[str, Any]
     status: Optional[str] = None
 
-    def __post_init__(self):
-        self.id = str(uuid.uuid4())
+    def __init__(self, action_type: ActionType, arguments: Dict[str, Any], status: Optional[str] = None, id: Optional[str] = None):
+        self.action_type = action_type
+        self.arguments = arguments
+        self.status = status
+        if id:
+            self.id = id
+        else:
+            self.id = str(uuid.uuid4())
 
     def to_dict(self):
         """Converts the FunctionCall to a dictionary."""
@@ -236,11 +242,8 @@ class FunctionCall:
     @classmethod
     def from_dict(cls, data: Dict):
         """Creates a FunctionCall object from a dictionary."""
-        return FunctionCall(
-            action_type=ActionType(data["name"]),
-            arguments=data["arguments"],
-            status=data["status"]
-        )
+        return FunctionCall(action_type=ActionType(data["name"]), arguments=data["arguments"], status=data["status"], id=data["id"])
+    
     def _get_param_str(self):
         return ", ".join([f"{key}={value}" for key, value in self.arguments.items()])
 
