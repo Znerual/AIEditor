@@ -11,9 +11,10 @@ from document_manager import DocumentManager
 from embedding_manager import EmbeddingManager
 from models import db, FileContent, Document, DialogHistory
 from llm_manager import LLMManager
-from dialog_types import ActionPlan, ActionType, EditActionType, FormatAction, FormatActionType, ActionPlanFormat, FunctionCall, Decision, Evaluation, DialogTurn, FinalResult, IntermediaryResult, IntermediaryStatus, ListIndex
+from dialog_types import ActionPlan, ActionType, EditActionType, FormatAction, FormatActionType, ActionPlanFormat, FunctionCall, Decision, Evaluation, DialogTurn, FinalResult, IntermediaryResult, IntermediaryStatus, ListIndex, RefineAction
 from action_plan_manager import ActionPlanManager
 from dialog_history_manager import DialogHistoryManager
+from action_manager import ActionManager
 from response_evaluator import ResponseEvaluator
 
 logger = logging.getLogger('eddy_logger')
@@ -32,11 +33,15 @@ class DialogManager:
         self.select_find_text_match_model = llm_manager.create_llm(
             "fast", "google", response_format_model=ListIndex, model_name="select_find_text_match"
         )
+        self.refining_model = llm_manager.create_llm(
+            "fastest", "google", response_format_model=RefineAction, model_name="refining"
+        )
         self.evaluation_model = llm_manager.create_llm(
             "fast", "google", response_format_model=Evaluation, model_name="evaluation"
         )
         self._embedding_manager = EmbeddingManager()
         self.action_plan_manager = ActionPlanManager(self.planning_model, self.fix_planning_model, self.select_find_text_match_model)
+        self.action_manager = ActionManager(self.refining_model)
         self.dialog_history_manager = DialogHistoryManager()
         self.response_evaluator = ResponseEvaluator(self.evaluation_model)
 
@@ -173,7 +178,32 @@ class DialogManager:
                 )
             )
         
-
+        # Step 4: Refine the actions
+        refinement_generator = self.action_manager.refine_actions(actions, user_message, history, document_text, document_html)
+        for intermediary_result in refinement_generator:
+            if intermediary_result.type == "error":
+                # Failure or final response from a substep
+                yield intermediary_result
+                return
+            elif intermediary_result.type == "status": 
+                # Intermediary step
+                yield intermediary_result
+            else:
+                if isinstance(intermediary_result.message, dict):
+                    if intermediary_result.message.get("status") == "finished":
+                        refined_actions : List[FunctionCall] = intermediary_result.message.get("refined_actions")
+                        actions = refined_actions
+                        yield IntermediaryResult(
+                            type="status", 
+                            message=IntermediaryStatus(
+                                status="refined_actions", 
+                                action_plan=action_plan,
+                                positions=positions,
+                                timings=timings,
+                                refined_actions=refined_actions
+                                )
+                            )
+                        
         eval_start = time.time()
         evaluation_prompt = self.response_evaluator.build_evaluation_prompt(user_message, history, document_text, actions)
         try:

@@ -180,6 +180,23 @@ export const Editor = ({ documentId }) => {
 
             case "Fixing match ambigouities":
                 message = `Fixing match ambigouities: ${JSON.stringify(data.problem)}, choice: ${data.selection}`
+                break;
+
+            case "refining_actions":
+                message = `Refining actions`;
+                break;
+                
+            case "Failed to generate refinement for action":
+                message = `Failed to generate refinement for action: ${JSON.stringify(data.action)}`
+                break;
+            case "Action refinement rejected action":
+                message = `Action refinement rejected action: ${JSON.stringify(data.action)}, because: ${data.explanation}`
+                break;
+
+            case "Action refinement accepted action":
+                message = `Action refinement accepted action: ${JSON.stringify(data.action)}, because: ${data.explanation} and modified to: ${JSON.stringify(data.refined_action)}`
+                break;
+
             case 'accepted':
                 message = `Suggestion accepted.`;
                 break;
@@ -1101,7 +1118,10 @@ export const Editor = ({ documentId }) => {
         emit('client_structure_rejected');
     }, []);
 
-
+    const handleDeleteChatHistory = useCallback(() => {
+        setChatMessages([]);
+        emit('client_delete_chat_history', {'document_id': documentId});
+    }, []);
 
     return (
         <div className="app-container">
@@ -1140,6 +1160,7 @@ export const Editor = ({ documentId }) => {
                             messages={chatMessages}
                             setMessages={setChatMessages}
                             onSend={handleChatSubmit}
+                            onDeleteChatHistory={handleDeleteChatHistory}
                         />
                     </div>
                 </div>

@@ -139,6 +139,12 @@ class Decision(str, enum.Enum):
 class ListIndex(BaseModel):
     index: int
 
+class RefineAction(BaseModel):
+    decision: Decision
+    explanation: str
+    start_position_offset: int
+    end_position_offset: int
+
 class FindAction(BaseModel):
     find_action_variable_name: str
     find_action_text: str
@@ -347,6 +353,7 @@ class IntermediaryStatus:
     mistakes: Optional[List[str]] = None
     timings: Optional[Dict[str, float]] = None
     positions: Optional[Dict[str, int]] = None
+    refined_actions: Optional[List[FunctionCall]] = None
 
 @dataclass
 class IntermediaryFixing:
@@ -361,7 +368,7 @@ class IntermediaryResult:
     Can either be a status update or a final response.
     """
     type: str  # 'status' | 'response' | 'error
-    message: Union[IntermediaryStatus, IntermediaryFixing, ActionPlan, Dict]
+    message: Union[IntermediaryStatus, IntermediaryFixing, ActionPlan, Dict, List]
 
 class FinalResult:
     status: str # 'error' | 'response'

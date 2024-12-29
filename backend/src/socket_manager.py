@@ -438,6 +438,11 @@ class SocketManager:
                         self.emit_event(WebSocketEvent(
                             "server_chat_answer_intermediary", 
                             response_dict))
+                        
+                    elif isinstance(response_data.message, dict):
+                        self.emit_event(WebSocketEvent(
+                            "server_chat_answer_intermediary", 
+                            response_data.message))
                     else:
                         raise ValueError(f"Unknown intermediary result type: {type(response_data.message)}")
                 
@@ -503,6 +508,25 @@ class SocketManager:
             except Exception as e:
                 self.emit_event(WebSocketEvent("server_error", {"message": str(e)}))
         
+
+        @self._socketio.on("client_delete_chat_history")
+        @Auth.socket_auth_required(emit_event=self.emit_event)
+        def handle_client_delete_chat_history(user_id, data):
+            document_id = data.get('document_id')
+            if not document_id:
+                self.emit_event(WebSocketEvent("server_error", {"message": "Missing document_id in handle_client_delete_chat_history"}))
+                return
+            
+            history_entry = DialogHistory.query.filter_by(document_id=document_id, user_id=user_id).first()
+            if not history_entry:
+                self.emit_event(WebSocketEvent("server_error", {"message": "No history found for user"}))
+                return
+            
+            history_entry.turns = []
+            db.session.commit()
+            self.emit_event(WebSocketEvent("server_deleted_chat_history", {"document_id": document_id}))
+
+
     def emit_event(self, event: WebSocketEvent, **kwargs):
         if self._socketio is None:
             raise RuntimeError("SocketIO not initialized")

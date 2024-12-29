@@ -15,7 +15,7 @@ import google.generativeai as genai
 import json
 import anthropic
 import logging
-from dialog_types import FunctionCall, FindAction, EditAction, ActionType, ActionPlan
+from dialog_types import FunctionCall, FindAction, EditAction, ActionType, ActionPlan, EditActionType
 
 
 logger = logging.getLogger('eddy_logger')
@@ -74,21 +74,17 @@ class DebugModel:
         if self.model_name == 'planning':
             # Simulate a more elaborate action plan with some intentional errors
             if "User:" in prompt and "important information" in prompt and "outdated policy" in prompt:
-                action1 = FindAction(find_action_text="important information", find_action_start_variable_name="info_start", find_action_end_variable_name="info_end", action_explanation="Find the important information in the document.")
-                action2 = FindAction(find_action_text="outdated policy", find_action_start_variable_name="outdated_start", find_action_end_variable_name="outdated_end", action_explanation="Locate the section with outdated policy.")
-                action3 = EditAction(action_type=ActionType.DELETE_TEXT, action_input_start_variable_name="outdated_start", action_input_end_variable_name="outdated_end", action_explanation="Remove the outdated policy section.", action_text_input="")
-                action4 = EditAction(action_type=ActionType.INSERT_TEXT, action_input_start_variable_name="info_end", action_input_end_variable_name="", action_text_input=" New updated information.", action_explanation="Add new information after the important information section.")
-                return ActionPlan(find_actions=[action1, action2], edit_actions=[action3, action4])
+                action1 = FindAction(find_action_text="important information", find_action_variable_name="info_start")
+                action2 = FindAction(find_action_text="outdated policy", find_action_variable_name="outdated_start")
+                action3 = EditAction(action_type=EditActionType.DELETE_TEXT, position_variable_name="outdated_start", selection_length=5, action_explanation="Remove the outdated policy section.", action_text_input="")
+                action4 = EditAction(action_type=EditActionType.INSERT_TEXT, position_variable_name="info_end", selection_length=10, action_text_input=" New updated information.", action_explanation="Add new information after the important information section.")
+                return ActionPlan(find_actions=[action1, action2], edit_actions=[action3, action4], format_actions=[])
             else:  
-                action1 = FindAction(find_action_text="debug", find_action_start_variable_name="data_start", find_action_end_variable_name="data_end", action_explanation="Find the beginning and end of the section 'important data'")
-                action2 = EditAction(action_type=ActionType.REPLACE_TEXT, action_input_start_variable_name="data_start", action_input_end_variable_name="data_end", action_text_input="Corrected important data.", action_explanation="Replace the text between 'data_start' and 'data_end'")
-                action3 = EditAction(action_type=ActionType.INSERT_TEXT, action_input_start_variable_name="data_end", action_input_end_variable_name="", action_text_input=" Additional context.", action_explanation="Add additional context after 'data_end'.")
-                return ActionPlan(find_actions=[action1], edit_actions=[action2, action3])
-                # return DebugResponse(text=json.dumps([
-                #     {"action_type": "find_text", "action_input_start_variable_name": "", "action_input_end_variable_name": "", "action_text_input": "debug", "find_action_start_variable_name": "data_start", "find_action_end_variable_name": "data_end", "action_explanation": "Find the beginning and end of the section 'important data'"},
-                #     {"action_type": "replace_text", "action_input_start_variable_name": "data_start", "action_input_end_variable_name": "data_end", "action_text_input": "Corrected important data.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Replace the text between 'data_start' and 'data_end'"},
-                #     {"action_type": "insert_text", "action_input_start_variable_name": "data_end", "action_input_end_variable_name": "", "action_text_input": " Additional context.", "find_action_start_variable_name": "", "find_action_end_variable_name": "", "action_explanation": "Add additional context after 'data_end'."}
-                # ]))
+                action1 = FindAction(find_action_text="debug", find_action_variable_name="data_start")
+                action2 = EditAction(action_type=EditActionType.REPLACE_TEXT, position_variable_name="data_start", selection_length=5, action_text_input="Corrected important data.", action_explanation="Replace the text between 'data_start' and 'data_end'")
+                action3 = EditAction(action_type=EditActionType.INSERT_TEXT,  position_variable_name="data_end", selection_length=5, action_text_input=" Additional context.", action_explanation="Add additional context after 'data_end'.")
+                return ActionPlan(find_actions=[action1], edit_actions=[action2, action3], format_actions=[])
+             
         elif self.model_name == 'fix_planning':
             # Simulate a fixed action plan
             return DebugResponse(text=json.dumps([
@@ -141,6 +137,7 @@ class DebugPart:
 
 class LLM(ABC):
     """Abstract base class for language model instances."""
+    fastest_model_name: str = "unknown"
     fast_model_name: str = "unknown"
     slow_model_name: str = "unknown"
     embedding_model_name: str = "unknown"
@@ -173,6 +170,13 @@ class LLM(ABC):
         if mode == "fast": return self.fast_model_name
         if mode == "slow": return self.slow_model_name
         if mode == "embedding": return self.embedding_model_name
+
+        if mode == "fastest": 
+            if self.fastest_model_name != "unknown":
+                return self.fastest_model_name
+            else:
+                return self.fast_model_name
+            
         raise ValueError(f"Invalid mode: {mode}")    
     
     def _validate_response(self, response_text):
@@ -306,6 +310,7 @@ class AnthropicLLM(LLM):
 
 class GeminiLLM(LLM):
     """Implementation of LLM for Google's Gemini models."""
+    fastest_model_name: str = "gemini-1.5-flash-8b-latest"
     fast_model_name: str = "gemini-1.5-flash-latest"
     slow_model_name: str = "gemini-1.5-pro-latest"
     embedding_model_name: str = "embedding-001"
