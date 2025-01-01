@@ -91,6 +91,7 @@ Return a JSON object matching the RefineAction model:
     "explanation": "Brief explanation of your refinement or rejection",
     "start_position_offset": int,  // Adjustment to the start position (positive or negative)
     "end_position_offset": int  // Adjustment to the end position (positive or negative)
+}
 
 ### Important Notes:
 - Position offset can be positive (move right) or negative (move left)
