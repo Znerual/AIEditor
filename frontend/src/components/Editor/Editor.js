@@ -185,6 +185,10 @@ export const Editor = ({ documentId }) => {
             case "refining_actions":
                 message = `Refining actions`;
                 break;
+
+            case "refined_actions":
+                message = `Refined actions: ${JSON.stringify(data.refined_actions)} for action plan ${JSON.stringify(data.action_plan)} and positions ${JSON.stringify(data.positions)}`;
+                break;
                 
             case "Failed to generate refinement for action":
                 message = `Failed to generate refinement for action: ${JSON.stringify(data.action)}`
