@@ -1,6 +1,9 @@
 from typing import Generator, List
 from dialog_types import ActionType, Decision, DialogTurn, FunctionCall, IntermediaryResult, IntermediaryStatus, RefineAction, IntermediaryResult
 from llm_manager import LLM
+import logging
+
+logger = logging.getLogger("eddy_logger")
 
 class ActionManager:
     def __init__(self, refining_model: LLM) -> None:
@@ -21,26 +24,26 @@ class ActionManager:
 
         # get action context
         if action.action_type == ActionType.INSERT_TEXT:
-            action_context = document_text[action.arguments["position"] - 256:action.arguments["position"]]
+            action_context = document_text[max(0, action.arguments["position"] - 256):action.arguments["position"]]
             action_context += "*START_POSITION*"
-            action_context += document_text[action.arguments["position"]:action.arguments["position"] + 256]
+            action_context += document_text[action.arguments["position"]:min(len(document_text), action.arguments["position"] + 256)]
 
-            action_formatting_context = document_html[action.arguments["position"] - 256:action.arguments["position"]]
+            action_formatting_context = document_html[max(0, action.arguments["position"] - 256):action.arguments["position"]]
             action_formatting_context += "*START_POSITION*"
-            action_formatting_context += document_html[action.arguments["position"]:action.arguments["position"] + 256]
+            action_formatting_context += document_html[action.arguments["position"]:min(len(document_html), action.arguments["position"] + 256)]
             
         else:
-            action_context = document_text[action.arguments["start"] - 256:action.arguments["start"]]
+            action_context = document_text[max(0, action.arguments["start"] - 256):action.arguments["start"]]
             action_context += "*START_POSITION*"
             action_context += document_text[action.arguments["start"]:action.arguments["end"]]
             action_context += "*END_POSITION*"
-            action_context += document_text[action.arguments["end"]:action.arguments["end"] + 256]
+            action_context += document_text[action.arguments["end"]:min(len(document_text), action.arguments["end"] + 256)] 
 
-            action_formatting_context = document_html[action.arguments["start"] - 256:action.arguments["start"]]
+            action_formatting_context = document_html[max(0, action.arguments["start"] - 256):action.arguments["start"]]
             action_formatting_context += "*START_POSITION*"
             action_formatting_context += document_html[action.arguments["start"]:action.arguments["end"]]
             action_formatting_context += "*END_POSITION*"
-            action_formatting_context += document_html[action.arguments["end"]:action.arguments["end"] + 256]
+            action_formatting_context += document_html[action.arguments["end"]:min(len(document_html), action.arguments["end"] + 256)]
 
            
         # Add current context
@@ -61,6 +64,7 @@ You are given the dialog histroy, the current user message, the formatted docume
 Prioritize the current user message over the dialog history, but also use the history to guide your refinement.
 The formatted document region is the formatted version of the document region, and you should use it to understand the current formatting of the document.
 The document region is the selection of the text where the action should be applied. All position changes or selection changes should be based on this text.
+The position of the proposed action is shown by the *START_POSITION* and *END_POSITION* markers. Ignore the markers themselves, only consider their positions.
 Analyze the proposed action and refine its start and end position to perfectly match the user's intentions. 
 
 ### Evaluation Criteria:
@@ -125,10 +129,11 @@ Return a JSON object matching the RefineAction model:
             )
         for action in actions:
             prompt = self.generate_refinement_prompt(action, user_message, history, document_text, document_html)
-            print(f"Refinement prompt: {prompt}")
+            logger.info(f"Refinement prompt: {prompt}")
             try:
                 refine_action = self.refining_model.generate_content(prompt)
             except Exception as e:
+                logger.error(f"Failed to generate refinement for action: {str(e)}")
                 yield IntermediaryResult(
                     type="error",
                     message={
