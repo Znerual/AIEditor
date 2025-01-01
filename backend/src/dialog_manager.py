@@ -11,7 +11,7 @@ from document_manager import DocumentManager
 from embedding_manager import EmbeddingManager
 from models import db, FileContent, Document, DialogHistory
 from llm_manager import LLMManager
-from dialog_types import ActionPlan, ActionType, EditActionType, FormatAction, FormatActionType, ActionPlanFormat, FunctionCall, Decision, Evaluation, DialogTurn, FinalResult, IntermediaryResult, IntermediaryStatus, ListIndex, RefineAction
+from dialog_types import ActionPlan, ActionType, EditActionType, FormatAction, FormatActionType, ActionPlanFormat, RefineActionFormat, FunctionCall, Decision, Evaluation, DialogTurn, FinalResult, IntermediaryResult, IntermediaryStatus, ListIndex, RefineAction
 from action_plan_manager import ActionPlanManager
 from dialog_history_manager import DialogHistoryManager
 from action_manager import ActionManager
@@ -34,7 +34,7 @@ class DialogManager:
             "fast", "google", response_format_model=ListIndex, model_name="select_find_text_match"
         )
         self.refining_model = llm_manager.create_llm(
-            "fastest", "google", response_format_model=RefineAction, model_name="refining"
+            "fastest", "google", response_format_model=RefineAction, response_format_json=RefineActionFormat, model_name="refining"
         )
         self.evaluation_model = llm_manager.create_llm(
             "fast", "google", response_format_model=Evaluation, model_name="evaluation"
