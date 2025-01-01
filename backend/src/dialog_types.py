@@ -59,6 +59,19 @@ ActionPlanFormat = {
     "required": ["find_actions", "edit_actions", "format_actions"]
 }
 
+RefineActionFormat = {
+    "type": "object",
+    "properties": {
+        "decision": {
+            "type": "string",
+            "enum": ["apply", "reject"]
+        },
+        "explanation": {"type": "string"},
+        "start_position_offset": {"type": "integer"},
+        "end_position_offset": {"type": "integer"}
+    },
+    "required": ["decision", "explanation", "start_position_offset", "end_position_offset"]
+}
 
 
 class ActionType(str, enum.Enum):
