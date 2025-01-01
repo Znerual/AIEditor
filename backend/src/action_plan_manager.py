@@ -772,7 +772,7 @@ If you think that none is correct, return -1.
             logging.info(f"Fixed action plan still has variable naming warnings: {validation_warnings}")
 
         # Further validate specifically for find_text issues
-        _, find_text_mistakes, _ = self._validate_find_text_actions(document_text, fixed_action_plan)
+        _,_, find_text_mistakes, _ = self._validate_find_text_actions(document_text, fixed_action_plan)
         if find_text_mistakes:
             logging.error(f"Fixed action plan still has find_text problems: {find_text_mistakes}")
 
